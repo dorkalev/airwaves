@@ -50,7 +50,7 @@
 
 <div id="hud"><div id="status">ready</div></div>
 <div class="toolbar" style="display:none" id="toolbar">
-  <button class="tool" id="sensBtn">touch: high</button>
+  <button class="tool" id="sensBtn">contact: touch</button>
   <button class="tool" id="swapBtn">swap hands</button>
   <button class="tool" id="waveBtn">tone: glass</button>
   <button class="tool" id="octBtn">octave: 0</button>
@@ -151,9 +151,10 @@ const on = new Array(8).fill(false);          // is each voice currently soundin
 const offCount = new Array(8).fill(0);        // consecutive "released" frames (debounce)
 const flash = new Array(8).fill(0);           // viz attack flash
 // contact thresholds (thumb↔fingertip distance ÷ hand size); generous by default
-const SENS = { high: { on: 0.62, off: 0.92 }, med: { on: 0.52, off: 0.80 }, low: { on: 0.42, off: 0.66 } };
-const SENS_ORDER = ['high', 'med', 'low'];
-let sens = 'high', ON_T = SENS.high.on, OFF_T = SENS.high.off;
+// must actually touch: distances are tight now that tracking is smoothed/stable
+const SENS = { touch: { on: 0.30, off: 0.52 }, firm: { on: 0.22, off: 0.40 }, near: { on: 0.42, off: 0.66 } };
+const SENS_ORDER = ['touch', 'firm', 'near'];
+let sens = 'touch', ON_T = SENS.touch.on, OFF_T = SENS.touch.off;
 const REL_FRAMES = 3;                              // frames of clear separation before a note stops
 let running = false, lastVideoTime = -1;
 let drawHands = [], presentCount = 0;
@@ -280,7 +281,7 @@ async function engage() {
   }
 }
 $('start').onclick = engage;
-$('sensBtn').onclick = () => { sens = SENS_ORDER[(SENS_ORDER.indexOf(sens) + 1) % SENS_ORDER.length]; ON_T = SENS[sens].on; OFF_T = SENS[sens].off; $('sensBtn').textContent = 'touch: ' + sens; };
+$('sensBtn').onclick = () => { sens = SENS_ORDER[(SENS_ORDER.indexOf(sens) + 1) % SENS_ORDER.length]; ON_T = SENS[sens].on; OFF_T = SENS[sens].off; $('sensBtn').textContent = 'contact: ' + sens; };
 $('swapBtn').onclick = () => { swap = !swap; $('swapBtn').textContent = swap ? 'swap hands ✓' : 'swap hands'; };
 $('waveBtn').onclick = () => { waveName = WAVE_ORDER[(WAVE_ORDER.indexOf(waveName) + 1) % WAVE_ORDER.length]; setWave(); $('waveBtn').textContent = 'tone: ' + waveName; };
 $('octBtn').onclick = () => { octave = octave >= 1 ? -1 : octave + 1; $('octBtn').textContent = 'octave: ' + (octave > 0 ? '+' : '') + octave; };
