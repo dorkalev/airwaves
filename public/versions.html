@@ -9,47 +9,64 @@
 <style>
   :root { --hot:#ff2e88; --cyan:#29f4ff; --lime:#b6ff2e; --violet:#b16eff; --bg:#0a0a12; --ink:#e8ebf0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:var(--bg); color:var(--ink); font-family:'Newsreader', Georgia, serif; line-height:1.65; }
-  .wrap { max-width:800px; margin:0 auto; padding:44px 22px 90px; }
-  h1 { font-family:'Bangers', cursive; font-size:clamp(46px,9vw,84px); letter-spacing:.02em; line-height:.95; text-shadow:3px 3px 0 var(--hot), 6px 6px 0 #7a0b3d; }
-  h1 .z { color:var(--violet); text-shadow:3px 3px 0 var(--cyan), 6px 6px 0 #0b4a7a; }
-  .lede { font-size:19px; color:#c7ccd6; margin-top:14px; } .lede b { color:#fff; }
-  .meta { font-family:'Fragment Mono', monospace; font-size:12px; color:#7a8493; margin-top:10px; letter-spacing:.04em; }
+  html, body { height:100%; }
+  body { background:var(--bg); color:var(--ink); font-family:'Newsreader', Georgia, serif; line-height:1.65; overflow:hidden; }
 
-  article { padding:24px 0; border-top:1px solid #ffffff12; }
-  .vtag { font-family:'Bangers', cursive; font-size:30px; color:var(--lime); letter-spacing:.03em; }
-  .vtitle { font-family:'Fragment Mono', monospace; font-size:14px; color:#aeb6c2; margin-left:8px; }
-  .prompt { font-family:'Fragment Mono', monospace; font-size:14px; color:#dfe7ef; background:#14202b; border-left:3px solid var(--cyan); border-radius:0 10px 10px 0; padding:11px 15px; margin:14px 0; }
-  .prompt .who { display:block; color:#5f93a3; font-size:11px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:5px; }
-  .explain { font-size:17px; color:#cfd4dd; }
-  .acts { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; }
+  .layout { display:flex; height:100vh; }
+  .left { width:40%; height:100vh; overflow-y:auto; padding:38px 30px 80px; }
+  .right { width:60%; height:100vh; display:flex; flex-direction:column; border-left:1px solid #ffffff18; background:#07070d; }
+
+  h1 { font-family:'Bangers', cursive; font-size:clamp(40px,6vw,66px); letter-spacing:.02em; line-height:.95; text-shadow:3px 3px 0 var(--hot), 6px 6px 0 #7a0b3d; }
+  h1 .z { color:var(--violet); text-shadow:3px 3px 0 var(--cyan), 6px 6px 0 #0b4a7a; }
+  .lede { font-size:17px; color:#c7ccd6; margin-top:12px; } .lede b { color:#fff; }
+  .meta { font-family:'Fragment Mono', monospace; font-size:11px; color:#7a8493; margin-top:9px; letter-spacing:.04em; }
+
+  article { padding:22px 0; border-top:1px solid #ffffff12; }
+  article.active .vtag { color:var(--cyan); }
+  .vtag { font-family:'Bangers', cursive; font-size:28px; color:var(--lime); letter-spacing:.03em; }
+  .vtitle { font-family:'Fragment Mono', monospace; font-size:13px; color:#aeb6c2; margin-left:8px; }
+  .prompt { font-family:'Fragment Mono', monospace; font-size:13px; color:#dfe7ef; background:#14202b; border-left:3px solid var(--cyan); border-radius:0 10px 10px 0; padding:10px 14px; margin:12px 0; }
+  .prompt .who { display:block; color:#5f93a3; font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:5px; }
+  .explain { font-size:16px; color:#cfd4dd; }
+  .acts { margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
   .acts button, .acts a { font-family:'Fragment Mono', monospace; font-size:13px; cursor:pointer; border-radius:9px; padding:8px 14px; text-decoration:none; border:1px solid #ffffff22; background:transparent; color:#cfe; }
   .acts .go { background:var(--lime); color:#0a0a12; border:none; }
   .acts button:hover, .acts a:hover { border-color:var(--cyan); color:#fff; }
 
-  .preview { margin:16px 0 4px; border:1px solid #ffffff22; border-radius:12px; overflow:hidden; background:#000; box-shadow:0 10px 40px #000a; }
-  .pv-bar { display:flex; align-items:center; gap:8px; padding:7px 10px; background:#12121e; font-family:'Fragment Mono', monospace; font-size:12px; }
-  .pv-bar b { color:var(--cyan); } .pv-bar .t { color:#8a94a5; } .pv-bar .sp { margin-left:auto; }
-  .pv-bar button { cursor:pointer; background:transparent; border:1px solid #ffffff22; color:#cfe; border-radius:7px; padding:3px 10px; }
+  .pv-bar { display:flex; align-items:center; gap:8px; padding:10px 12px; background:#12121e; font-family:'Fragment Mono', monospace; font-size:12px; border-bottom:1px solid #ffffff14; }
+  .pv-bar b { color:var(--cyan); font-size:15px; } .pv-bar .t { color:#8a94a5; } .pv-bar .sp { margin-left:auto; }
+  .pv-bar button { cursor:pointer; background:transparent; border:1px solid #ffffff22; color:#cfe; border-radius:8px; padding:5px 11px; }
   .pv-bar button:hover { border-color:var(--cyan); color:#fff; }
-  .pv-bar .close { color:#ff8aa8; border-color:#ff2e8855; }
-  .preview iframe { width:100%; aspect-ratio:4/3; border:0; display:block; background:#000; }
-  .preview iframe:fullscreen { aspect-ratio:auto; }
+  #pvFrame { flex:1; width:100%; border:0; background:#000; }
+  #placeholder { flex:1; display:grid; place-items:center; text-align:center; color:#667; font-family:'Fragment Mono', monospace; font-size:13px; padding:20px; }
+  #placeholder .big { font-family:'Bangers', cursive; font-size:40px; color:#2a3340; margin-bottom:10px; }
 
-  .foot { margin-top:36px; font-family:'Fragment Mono', monospace; font-size:12px; color:#667; }
-  .foot a { color:var(--cyan); text-decoration:none; }
+  @media (max-width: 860px) {
+    body { overflow:auto; }
+    .layout { flex-direction:column; height:auto; }
+    .left, .right { width:100%; height:auto; }
+    .right { position:sticky; top:0; height:64vh; z-index:5; }
+    .left { order:2; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>AIR<span class="z">WAVES</span></h1>
-  <p class="lede">An instrument built <b>live, one prompt at a time</b> — a webcam, on-device hand tracking, and a
-    Web Audio synth. This is the whole thing as a <b>playable changelog</b>: every version, the message that caused it,
-    and what changed. Hit <b>▶ preview</b> to run one right here (one at a time), or <b>⛶ fullscreen</b> it.</p>
-  <p class="meta">on-device (MediaPipe + WebGPU) · nothing uploaded · best on desktop Chrome/Edge with a webcam</p>
-
-  <div id="posts"></div>
-  <div class="foot">Part of the AIR family · <a href="https://airslice.dorkalev.com" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" target="_blank" rel="noopener">Dor Kalev</a>. Hand tracking by Google MediaPipe.</div>
+<div class="layout">
+  <div class="left">
+    <h1>AIR<span class="z">WAVES</span></h1>
+    <p class="lede">An instrument built <b>live, one prompt at a time</b> — a webcam, on-device hand tracking, and a
+      Web Audio synth. This is the whole thing as a <b>playable changelog</b>: every version, the message that caused it,
+      and what changed. Click <b>▶ preview</b> and it runs on the right — already started.</p>
+    <p class="meta">on-device (MediaPipe + WebGPU) · nothing uploaded · desktop Chrome/Edge + webcam</p>
+    <div id="posts"></div>
+    <p class="meta" style="margin-top:34px">AIR family · <a href="https://airslice.dorkalev.com" style="color:var(--cyan)" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" style="color:var(--cyan)" target="_blank" rel="noopener">Dor Kalev</a> · hands by Google MediaPipe</p>
+  </div>
+  <div class="right">
+    <div class="pv-bar"><b id="pvTag">AIRWAVES</b><span class="t" id="pvTitle">pick a version →</span>
+      <span class="sp"></span><button id="pvFull">⛶ fullscreen</button></div>
+    <div id="placeholder"><div><div class="big">▶</div>click “preview” on any version — it starts here automatically</div></div>
+    <iframe id="pvFrame" style="display:none" allow="camera; microphone; autoplay; fullscreen"></iframe>
+  </div>
 </div>
 
 <script>
@@ -68,20 +85,25 @@ const V = [
   ['v10', 'centered & transparent', "the keyboard shouldn't take the whole screen but it should be transparent and in the middle", "Made the piano less of a wall: smaller, centered, and semi-transparent so your hands read clearly through the keys."],
 ];
 
-// one shared live window, moved to whichever version you preview (one at a time)
-const preview = document.createElement('div'); preview.className = 'preview';
-preview.innerHTML = `<div class="pv-bar"><b id="pvTag"></b><span class="t" id="pvTitle"></span>
-  <span class="sp"></span><button id="pvFull">⛶ fullscreen</button><button class="close" id="pvClose">✕ close</button></div>
-  <iframe id="pvFrame" allow="camera; microphone; autoplay; fullscreen"></iframe>`;
-const pvFrame = preview.querySelector('#pvFrame');
-preview.querySelector('#pvFull').onclick = () => { (pvFrame.requestFullscreen || pvFrame.webkitRequestFullscreen).call(pvFrame); };
-preview.querySelector('#pvClose').onclick = () => { pvFrame.src = 'about:blank'; preview.remove(); };
-function showPreview(post, tag, title) {
-  preview.querySelector('#pvTag').textContent = tag;
-  preview.querySelector('#pvTitle').textContent = title;
-  pvFrame.src = RUN(tag);                       // switching versions reloads → releases the old camera
-  post.appendChild(preview);                    // move the single window next to this version
-  preview.scrollIntoView({ behavior: 'smooth', block: 'center' });
+const pvFrame = document.getElementById('pvFrame');
+const placeholder = document.getElementById('placeholder');
+// when a version loads, auto-press its START so no extra click is needed
+pvFrame.onload = () => {
+  try {
+    const doc = pvFrame.contentDocument; if (!doc) return;
+    const btn = doc.getElementById('start');
+    if (btn) btn.click();                       // same-origin → we can start it for you
+  } catch (e) {}
+};
+document.getElementById('pvFull').onclick = () => { if (pvFrame.style.display !== 'none') (pvFrame.requestFullscreen || pvFrame.webkitRequestFullscreen).call(pvFrame); };
+
+function loadVersion(tag, title, art) {
+  document.querySelectorAll('article.active').forEach(a => a.classList.remove('active'));
+  if (art) art.classList.add('active');
+  document.getElementById('pvTag').textContent = tag;
+  document.getElementById('pvTitle').textContent = title;
+  placeholder.style.display = 'none'; pvFrame.style.display = '';
+  pvFrame.src = RUN(tag);                        // switching reloads → releases the old camera + auto-starts the new
 }
 
 const posts = document.getElementById('posts');
@@ -93,7 +115,7 @@ V.forEach(([tag, title, prompt, explain]) => {
     <p class="explain">${explain}</p>
     <div class="acts"><button class="go">▶ preview ${tag}</button>
       <a href="${RUN(tag)}" target="_blank" rel="noopener">↗ open in tab</a></div>`;
-  a.querySelector('.go').onclick = () => showPreview(a, tag, title);
+  a.querySelector('.go').onclick = () => loadVersion(tag, title, a);
   posts.appendChild(a);
 });
 </script>
