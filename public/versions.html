@@ -54,9 +54,8 @@
 <div class="links" id="links"></div>
 
 <script>
-const REPO = 'dorkalev/airwaves';
-const RUN = (tag) => `https://raw.githack.com/${REPO}/${tag}/public/index.html`;     // live, runnable
-const SRC = (tag) => `https://github.com/${REPO}/releases/tag/${tag}`;               // source permalink
+// each version is baked into ./versions/<tag>.html — served from THIS origin, no third party
+const RUN = (tag) => `./versions/${tag}.html`;
 const VERSIONS = [
   ['v0', 'theremin — height=pitch, pinch=swell (first)'],
   ['v1', 'finger-tap piano — thumb touches each finger'],
@@ -92,7 +91,7 @@ document.getElementById('addAll').onclick = () => { addTile('v0', VERSIONS[0][1]
 document.getElementById('clear').onclick = () => { grid.innerHTML = '<div class="empty">no versions yet — click a version above ▲</div>'; };
 // direct permalinks list
 document.getElementById('links').innerHTML = '<b style="color:#fff">Direct links (open in a new tab):</b><br>' +
-  VERSIONS.map(([tag, desc]) => `<span class="n">${tag}</span> — <a href="${RUN(tag)}" target="_blank" rel="noopener">▶ play</a> · <a href="${SRC(tag)}" target="_blank" rel="noopener">source</a> · <span style="color:#667">${desc}</span>`).join('<br>');
+  VERSIONS.map(([tag, desc]) => `<span class="n">${tag}</span> — <a href="${RUN(tag)}" target="_blank" rel="noopener">▶ play</a> · <span style="color:#667">${desc}</span>`).join('<br>');
 </script>
 </body>
 </html>
