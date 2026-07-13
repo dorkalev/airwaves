@@ -70,8 +70,10 @@
   <div class="right">
     <div class="pv-bar"><b id="pvTag">AIRWAVES</b><span class="t" id="pvTitle">pick a version →</span>
       <span class="sp"></span><button id="pvFull">⛶ fullscreen</button></div>
-    <div id="placeholder"><div><div class="big">▶</div>click “preview” on any version — it starts here automatically</div></div>
-    <iframe id="pvFrame" style="display:none" allow="camera; microphone; autoplay; fullscreen"></iframe>
+    <div class="stage">
+      <iframe id="pvFrame" allow="camera; microphone; autoplay; fullscreen"></iframe>
+      <div id="cover"><div><div class="big">▶</div><span id="coverText">click “play” on any version — it starts here automatically</span></div></div>
+    </div>
   </div>
 </div>
 
@@ -89,27 +91,31 @@ const V = [
   ['v8', 'open hand = stop', "open hand means stop playing", "Added a stop gesture: open your whole hand (all fingers extended) and that hand goes silent — a natural “hands up” mute."],
   ['v9', 'an on-screen piano', "create another version where you show a piano on the screen and when each note is getting touched it plays", "A different instrument: a real on-screen piano with white and black keys. Any fingertip that lands on a key plays it — polyphonic, sustain while touched."],
   ['v10', 'centered & transparent', "the keyboard shouldn't take the whole screen but it should be transparent and in the middle", "Made the piano less of a wall: smaller, centered, and semi-transparent so your hands read clearly through the keys."],
+  ['v11', 'no more skew', "the video is getting skewed (was also before on the full page)", "The camera was stretched to fill the canvas, distorting a 4:3 feed on a wide screen. Now it cover-fits — preserves aspect and center-crops — so faces and hands aren’t squashed."],
 ];
 
 const pvFrame = document.getElementById('pvFrame');
-const placeholder = document.getElementById('placeholder');
-// when a version loads, auto-press its START so no extra click is needed
+const cover = document.getElementById('cover');
+const coverText = document.getElementById('coverText');
+// on load: hide the version's own landing, auto-press START, THEN reveal — so its
+// start screen never flashes (the cover stays up until the app is actually running)
 pvFrame.onload = () => {
   try {
     const doc = pvFrame.contentDocument; if (!doc) return;
     const btn = doc.getElementById('start');
-    if (btn) btn.click();                       // same-origin → we can start it for you
+    if (btn) { doc.getElementById('boot')?.classList.add('gone'); btn.click(); cover.classList.add('hidden'); }
   } catch (e) {}
 };
-document.getElementById('pvFull').onclick = () => { if (pvFrame.style.display !== 'none') (pvFrame.requestFullscreen || pvFrame.webkitRequestFullscreen).call(pvFrame); };
+document.getElementById('pvFull').onclick = () => (pvFrame.requestFullscreen || pvFrame.webkitRequestFullscreen)?.call(pvFrame);
 
 function loadVersion(tag, title, art) {
   document.querySelectorAll('article.active').forEach(a => a.classList.remove('active'));
   if (art) art.classList.add('active');
   document.getElementById('pvTag').textContent = tag;
   document.getElementById('pvTitle').textContent = title;
-  placeholder.style.display = 'none'; pvFrame.style.display = '';
-  pvFrame.src = RUN(tag);                        // switching reloads → releases the old camera + auto-starts the new
+  coverText.innerHTML = 'starting ' + tag + '… <span class="loader"></span>';
+  cover.classList.remove('hidden');              // cover the frame so its landing never shows
+  pvFrame.src = RUN(tag);                         // switching reloads → releases the old camera + auto-starts
 }
 
 const posts = document.getElementById('posts');
@@ -119,7 +125,7 @@ V.forEach(([tag, title, prompt, explain]) => {
     <div><span class="vtag">${tag}</span><span class="vtitle">${title}</span></div>
     <div class="prompt"><span class="who">the prompt</span>“${prompt}”</div>
     <p class="explain">${explain}</p>
-    <div class="acts"><button class="go">▶ preview ${tag}</button>
+    <div class="acts"><button class="go">▶ play</button>
       <a href="${RUN(tag)}" target="_blank" rel="noopener">↗ open in tab</a></div>`;
   a.querySelector('.go').onclick = () => loadVersion(tag, title, a);
   posts.appendChild(a);
