@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIRWAVES — versions (play side by side)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%8E%9B%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fragment+Mono&display=swap" rel="stylesheet">
+<style>
+  :root { --hot:#ff2e88; --cyan:#29f4ff; --lime:#b6ff2e; --violet:#b16eff; --bg:#0a0a12; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:#fff; font-family:'Fragment Mono', monospace; min-height:100vh; }
+  header { padding:16px 18px 10px; }
+  h1 { font-family:'Bangers', cursive; font-size:34px; letter-spacing:.03em; }
+  h1 .z { color:var(--violet); }
+  .hint { font-size:12px; color:#9aa; margin-top:4px; line-height:1.6; }
+  .hint b { color:var(--cyan); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; padding:10px 18px 4px; }
+  .chip { font-family:'Fragment Mono', monospace; font-size:12px; color:#cfe; background:#12121e; border:1px solid #ffffff1c;
+    border-radius:11px; padding:8px 12px; cursor:pointer; white-space:nowrap; }
+  .chip:hover { border-color:var(--cyan); color:#fff; }
+  .chip b { color:var(--lime); }
+  .chip .d { color:#8a94a5; }
+  .bar { display:flex; gap:8px; align-items:center; padding:6px 18px 12px; flex-wrap:wrap; }
+  .act { font-family:'Fragment Mono', monospace; font-size:12px; color:#0a0a12; background:var(--lime); border:none; border-radius:9px; padding:8px 12px; cursor:pointer; }
+  .act.ghost { background:transparent; color:#9aa; border:1px solid #ffffff22; }
+  .act.ghost:hover { color:#fff; }
+  #grid { display:grid; gap:10px; padding:0 12px 20px; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); }
+  .tile { border:1px solid #ffffff1c; border-radius:14px; overflow:hidden; background:#000; display:flex; flex-direction:column; }
+  .tile .top { display:flex; align-items:center; gap:8px; padding:7px 10px; background:#12121e; font-size:12px; }
+  .tile .top b { color:var(--cyan); } .tile .top .d { color:#8a94a5; font-size:11px; }
+  .tile .x { margin-left:auto; cursor:pointer; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:8px; padding:3px 9px; }
+  .tile .x:hover { background:#7a0b3d; color:#fff; }
+  .tile iframe { width:100%; aspect-ratio:4/3; border:0; display:block; background:#000; }
+  .empty { color:#667; text-align:center; padding:40px 20px; font-size:13px; grid-column:1/-1; }
+  .links { padding:0 18px 40px; font-size:12px; color:#8a94a5; line-height:2; }
+  .links a { color:var(--cyan); text-decoration:none; } .links a:hover { text-decoration:underline; }
+  .links .n { color:var(--lime); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AIR<span class="z">WAVES</span> · versions</h1>
+  <div class="hint">Click a version to add it as a <b>live tile</b> — add several to play/compare them <b>at the same time</b>.
+    Each tile is its own page: press <b>START</b> inside it and allow the camera (asked once). Heads-up: each tile runs its
+    own hand-tracking, so <b>2–3 at once</b> is comfortable; more will get heavy.</div>
+</header>
+<div class="chips" id="chips"></div>
+<div class="bar">
+  <button class="act" id="addAll">＋ add v0 & latest</button>
+  <button class="act ghost" id="clear">clear all</button>
+</div>
+<div id="grid"><div class="empty">no versions yet — click a version above to drop it in ▲</div></div>
+<div class="links" id="links"></div>
+
+<script>
+const REPO = 'dorkalev/airwaves';
+const RUN = (tag) => `https://raw.githack.com/${REPO}/${tag}/public/index.html`;     // live, runnable
+const SRC = (tag) => `https://github.com/${REPO}/releases/tag/${tag}`;               // source permalink
+const VERSIONS = [
+  ['v0', 'theremin — height=pitch, pinch=swell (first)'],
+  ['v1', 'finger-tap piano — thumb touches each finger'],
+  ['v2', 'sustain-while-held + release debounce'],
+  ['v3', 'generous contact + sensitivity toggle'],
+  ['v4', 'frame-to-frame hand tracking (smoothing)'],
+  ['v5', 'require an actual touch'],
+  ['v6', 'thumb line — drop a finger to it'],
+  ['v7', 'keyboard layout — low left / high right'],
+  ['v8', 'open hand = mute  (latest)'],
+];
+
+const grid = document.getElementById('grid');
+function addTile(tag, desc) {
+  const empty = grid.querySelector('.empty'); if (empty) empty.remove();
+  const t = document.createElement('div'); t.className = 'tile';
+  t.innerHTML = `<div class="top"><b>${tag}</b> <span class="d">${desc}</span>
+    <span class="x">✕</span></div>
+    <iframe src="${RUN(tag)}" allow="camera; microphone; autoplay; fullscreen"></iframe>`;
+  t.querySelector('.x').onclick = () => { t.remove(); if (!grid.children.length) grid.innerHTML = '<div class="empty">no versions yet — click a version above ▲</div>'; };
+  grid.appendChild(t);
+}
+// chips
+const chips = document.getElementById('chips');
+VERSIONS.forEach(([tag, desc]) => {
+  const c = document.createElement('button'); c.className = 'chip';
+  c.innerHTML = `<b>${tag}</b> <span class="d">${desc}</span>`;
+  c.onclick = () => addTile(tag, desc);
+  chips.appendChild(c);
+});
+document.getElementById('addAll').onclick = () => { addTile('v0', VERSIONS[0][1]); addTile('v8', VERSIONS[8][1]); };
+document.getElementById('clear').onclick = () => { grid.innerHTML = '<div class="empty">no versions yet — click a version above ▲</div>'; };
+// direct permalinks list
+document.getElementById('links').innerHTML = '<b style="color:#fff">Direct links (open in a new tab):</b><br>' +
+  VERSIONS.map(([tag, desc]) => `<span class="n">${tag}</span> — <a href="${RUN(tag)}" target="_blank" rel="noopener">▶ play</a> · <a href="${SRC(tag)}" target="_blank" rel="noopener">source</a> · <span style="color:#667">${desc}</span>`).join('<br>');
+</script>
+</body>
+</html>
