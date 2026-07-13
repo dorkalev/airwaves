@@ -50,7 +50,7 @@
 
 <div id="hud"><div id="status">ready</div></div>
 <div class="toolbar" style="display:none" id="toolbar">
-  <button class="tool" id="sensBtn">contact: touch</button>
+  <button class="tool" id="sensBtn">band: level</button>
   <button class="tool" id="swapBtn">swap hands</button>
   <button class="tool" id="waveBtn">tone: glass</button>
   <button class="tool" id="octBtn">octave: 0</button>
@@ -60,7 +60,7 @@
   <div>
     <div class="title">AIR<span class="zap">WAVES</span></div>
     <div class="tag">A FINGER-TAP PIANO IN THE AIR</div>
-    <p class="sub">Hold your <b>thumb to a finger</b> to sound its note (release to stop).
+    <p class="sub">Drop a finger down to your <b>thumb's line</b> to sound its note (lift it to stop) — the thumb is just the line, it plays nothing.
       <b>Right hand:</b> index→<b>Do</b>, middle→<b>Re</b>, ring→<b>Mi</b>, pinky→<b>Fa</b>.
       <b>Left hand:</b> <b>Sol · La · Si · Do</b>. Together that's a full octave — tap out a melody,
       or hold two hands for harmony. Hand tracking runs <b>100% on-device</b> (MediaPipe + WebGPU); synth is pure Web Audio.</p>
@@ -151,10 +151,10 @@ const on = new Array(8).fill(false);          // is each voice currently soundin
 const offCount = new Array(8).fill(0);        // consecutive "released" frames (debounce)
 const flash = new Array(8).fill(0);           // viz attack flash
 // contact thresholds (thumb↔fingertip distance ÷ hand size); generous by default
-// must actually touch: distances are tight now that tracking is smoothed/stable
-const SENS = { touch: { on: 0.30, off: 0.52 }, firm: { on: 0.22, off: 0.40 }, near: { on: 0.42, off: 0.66 } };
-const SENS_ORDER = ['touch', 'firm', 'near'];
-let sens = 'touch', ON_T = SENS.touch.on, OFF_T = SENS.touch.off;
+// a finger plays when its tip is level (same Y) with the thumb; thumb = the line
+const SENS = { level: { on: 0.22, off: 0.40 }, tight: { on: 0.14, off: 0.28 }, wide: { on: 0.32, off: 0.55 } };
+const SENS_ORDER = ['level', 'tight', 'wide'];
+let sens = 'level', ON_T = SENS.level.on, OFF_T = SENS.level.off;
 const REL_FRAMES = 3;                              // frames of clear separation before a note stops
 let running = false, lastVideoTime = -1;
 let drawHands = [], presentCount = 0;
@@ -218,9 +218,10 @@ function processHands(hands, handed) {
     const handScale = dist(lm[0], lm[9]) || 0.2;
     for (let f = 0; f < 4; f++) {
       const vi = base + f; seen[vi] = true;
-      const d = dist(thumb, lm[FINGER_TIPS[f]]) / handScale;
-      if (!on[vi]) { if (d < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; } }
-      else if (d > OFF_T) { if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); } }
+      // play when the fingertip is on the thumb's horizontal line (same Y)
+      const dy = Math.abs(lm[FINGER_TIPS[f]].y - thumb.y) / handScale;
+      if (!on[vi]) { if (dy < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; } }
+      else if (dy > OFF_T) { if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); } }
       else offCount[vi] = 0;
     }
     drawHands.push({ lm, base, color: HAND_COLORS[role[s] ? 0 : 1] });
@@ -237,17 +238,17 @@ function draw() {
 
   for (const hnd of drawHands) {
     const { lm, base, color } = hnd;
-    const thumb = lm[4], tx = (1 - thumb.x) * W, ty = thumb.y * H;
-    // thumb dot
-    ctx.fillStyle = color; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(tx, ty, 8 * DPR, 0, 7); ctx.fill();
+    const thumb = lm[4], ty = thumb.y * H;
+    // the "note line": a horizontal guide at the thumb's height across the hand
+    let minx = 1, maxx = 0; for (const p of lm) { const sx = 1 - p.x; if (sx < minx) minx = sx; if (sx > maxx) maxx = sx; }
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.35; ctx.lineWidth = 2 * DPR; ctx.setLineDash([7 * DPR, 7 * DPR]);
+    ctx.beginPath(); ctx.moveTo((minx - 0.03) * W, ty); ctx.lineTo((maxx + 0.03) * W, ty); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = 0.75; ctx.fillStyle = color; ctx.beginPath(); ctx.arc((1 - thumb.x) * W, ty, 5 * DPR, 0, 7); ctx.fill();
     for (let f = 0; f < 4; f++) {
       const vi = base + f, tip = lm[FINGER_TIPS[f]];
       const px = (1 - tip.x) * W, py = tip.y * H;
       if (flash[vi] > 0) flash[vi] = Math.max(0, flash[vi] - 0.06);
       const fl = Math.max(flash[vi], on[vi] ? 0.55 : 0);   // steady glow while the note is held
-      // line thumb → fingertip
-      ctx.globalAlpha = 0.25 + fl * 0.5; ctx.strokeStyle = color; ctx.lineWidth = (1.5 + fl * 5) * DPR;
-      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(px, py); ctx.stroke();
       // note orb
       const R = (12 + fl * 26) * DPR;
       const grd = ctx.createRadialGradient(px, py, 0, px, py, R);
@@ -260,7 +261,7 @@ function draw() {
     }
   }
   ctx.globalAlpha = 1;
-  if (presentCount === 0) setStatus('raise a hand ✋ — tap thumb to a finger', 'warn');
+  if (presentCount === 0) setStatus('raise a hand ✋ — drop a finger to the thumb line', 'warn');
   else if ($('status').textContent !== 'playing 🎶') setStatus('playing 🎶');
 }
 
@@ -274,14 +275,14 @@ async function engage() {
     setStatus('starting… <span class="loader"></span>', 'warn');
     initAudio(); await AC.resume();
     await Promise.all([startCamera(), initHands()]);
-    running = true; setStatus('raise a hand ✋ — tap thumb to a finger', 'warn'); loop();
+    running = true; setStatus('raise a hand ✋ — drop a finger to the thumb line', 'warn'); loop();
   } catch (e) {
     console.error(e); engaged = false; $('boot').classList.remove('gone');
     setStatus('camera/model failed: ' + (e.name || e.message), 'err');
   }
 }
 $('start').onclick = engage;
-$('sensBtn').onclick = () => { sens = SENS_ORDER[(SENS_ORDER.indexOf(sens) + 1) % SENS_ORDER.length]; ON_T = SENS[sens].on; OFF_T = SENS[sens].off; $('sensBtn').textContent = 'contact: ' + sens; };
+$('sensBtn').onclick = () => { sens = SENS_ORDER[(SENS_ORDER.indexOf(sens) + 1) % SENS_ORDER.length]; ON_T = SENS[sens].on; OFF_T = SENS[sens].off; $('sensBtn').textContent = 'band: ' + sens; };
 $('swapBtn').onclick = () => { swap = !swap; $('swapBtn').textContent = swap ? 'swap hands ✓' : 'swap hands'; };
 $('waveBtn').onclick = () => { waveName = WAVE_ORDER[(WAVE_ORDER.indexOf(waveName) + 1) % WAVE_ORDER.length]; setWave(); $('waveBtn').textContent = 'tone: ' + waveName; };
 $('octBtn').onclick = () => { octave = octave >= 1 ? -1 : octave + 1; $('octBtn').textContent = 'octave: ' + (octave > 0 ? '+' : '') + octave; };
