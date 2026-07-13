@@ -50,6 +50,7 @@
 
 <div id="hud"><div id="status">ready</div></div>
 <div class="toolbar" style="display:none" id="toolbar">
+  <button class="tool" id="sensBtn">touch: high</button>
   <button class="tool" id="swapBtn">swap hands</button>
   <button class="tool" id="waveBtn">tone: glass</button>
   <button class="tool" id="octBtn">octave: 0</button>
@@ -149,7 +150,11 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const on = new Array(8).fill(false);          // is each voice currently sounding
 const offCount = new Array(8).fill(0);        // consecutive "released" frames (debounce)
 const flash = new Array(8).fill(0);           // viz attack flash
-const ON_T = 0.40, OFF_T = 0.66, REL_FRAMES = 4;   // hysteresis + release debounce
+// contact thresholds (thumb↔fingertip distance ÷ hand size); generous by default
+const SENS = { high: { on: 0.62, off: 0.92 }, med: { on: 0.52, off: 0.80 }, low: { on: 0.42, off: 0.66 } };
+const SENS_ORDER = ['high', 'med', 'low'];
+let sens = 'high', ON_T = SENS.high.on, OFF_T = SENS.high.off;
+const REL_FRAMES = 3;                              // frames of clear separation before a note stops
 let running = false, lastVideoTime = -1;
 let drawHands = [];   // [{lm, base, color}]
 
@@ -247,6 +252,7 @@ async function engage() {
   }
 }
 $('start').onclick = engage;
+$('sensBtn').onclick = () => { sens = SENS_ORDER[(SENS_ORDER.indexOf(sens) + 1) % SENS_ORDER.length]; ON_T = SENS[sens].on; OFF_T = SENS[sens].off; $('sensBtn').textContent = 'touch: ' + sens; };
 $('swapBtn').onclick = () => { swap = !swap; $('swapBtn').textContent = swap ? 'swap hands ✓' : 'swap hands'; };
 $('waveBtn').onclick = () => { waveName = WAVE_ORDER[(WAVE_ORDER.indexOf(waveName) + 1) % WAVE_ORDER.length]; setWave(); $('waveBtn').textContent = 'tone: ' + waveName; };
 $('octBtn').onclick = () => { octave = octave >= 1 ? -1 : octave + 1; $('octBtn').textContent = 'octave: ' + (octave > 0 ? '+' : '') + octave; };
