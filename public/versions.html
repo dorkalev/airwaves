@@ -66,7 +66,8 @@ const VERSIONS = [
   ['v5', 'require an actual touch'],
   ['v6', 'thumb line — drop a finger to it'],
   ['v7', 'keyboard layout — low left / high right'],
-  ['v8', 'open hand = mute  (latest)'],
+  ['v8', 'open hand = mute'],
+  ['v9', 'on-screen air piano — touch the keys (latest)'],
 ];
 
 const grid = document.getElementById('grid');
@@ -87,7 +88,7 @@ VERSIONS.forEach(([tag, desc]) => {
   c.onclick = () => addTile(tag, desc);
   chips.appendChild(c);
 });
-document.getElementById('addAll').onclick = () => { addTile('v0', VERSIONS[0][1]); addTile('v8', VERSIONS[8][1]); };
+document.getElementById('addAll').onclick = () => { addTile('v0', VERSIONS[0][1]); addTile('v9', VERSIONS[9][1]); };
 document.getElementById('clear').onclick = () => { grid.innerHTML = '<div class="empty">no versions yet — click a version above ▲</div>'; };
 // direct permalinks list
 document.getElementById('links').innerHTML = '<b style="color:#fff">Direct links (open in a new tab):</b><br>' +
