@@ -3,95 +3,103 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIRWAVES — versions (play side by side)</title>
+<title>AIRWAVES — built one prompt at a time</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%8E%9B%EF%B8%8F%3C/text%3E%3C/svg%3E">
-<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fragment+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fragment+Mono&family=Newsreader:ital,opsz@0,6..72;1,6..72&display=swap" rel="stylesheet">
 <style>
-  :root { --hot:#ff2e88; --cyan:#29f4ff; --lime:#b6ff2e; --violet:#b16eff; --bg:#0a0a12; }
+  :root { --hot:#ff2e88; --cyan:#29f4ff; --lime:#b6ff2e; --violet:#b16eff; --bg:#0a0a12; --ink:#e8ebf0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:var(--bg); color:#fff; font-family:'Fragment Mono', monospace; min-height:100vh; }
-  header { padding:16px 18px 10px; }
-  h1 { font-family:'Bangers', cursive; font-size:34px; letter-spacing:.03em; }
-  h1 .z { color:var(--violet); }
-  .hint { font-size:12px; color:#9aa; margin-top:4px; line-height:1.6; }
-  .hint b { color:var(--cyan); }
-  .chips { display:flex; flex-wrap:wrap; gap:8px; padding:10px 18px 4px; }
-  .chip { font-family:'Fragment Mono', monospace; font-size:12px; color:#cfe; background:#12121e; border:1px solid #ffffff1c;
-    border-radius:11px; padding:8px 12px; cursor:pointer; white-space:nowrap; }
-  .chip:hover { border-color:var(--cyan); color:#fff; }
-  .chip b { color:var(--lime); }
-  .chip .d { color:#8a94a5; }
-  .bar { display:flex; gap:8px; align-items:center; padding:6px 18px 12px; flex-wrap:wrap; }
-  .act { font-family:'Fragment Mono', monospace; font-size:12px; color:#0a0a12; background:var(--lime); border:none; border-radius:9px; padding:8px 12px; cursor:pointer; }
-  .act.ghost { background:transparent; color:#9aa; border:1px solid #ffffff22; }
-  .act.ghost:hover { color:#fff; }
-  #grid { display:grid; gap:10px; padding:0 12px 20px; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); }
-  .tile { border:1px solid #ffffff1c; border-radius:14px; overflow:hidden; background:#000; display:flex; flex-direction:column; }
-  .tile .top { display:flex; align-items:center; gap:8px; padding:7px 10px; background:#12121e; font-size:12px; }
-  .tile .top b { color:var(--cyan); } .tile .top .d { color:#8a94a5; font-size:11px; }
-  .tile .x { margin-left:auto; cursor:pointer; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:8px; padding:3px 9px; }
-  .tile .x:hover { background:#7a0b3d; color:#fff; }
+  body { background:var(--bg); color:var(--ink); font-family:'Newsreader', Georgia, serif; line-height:1.65; }
+  .wrap { max-width:800px; margin:0 auto; padding:44px 22px 90px; }
+  h1 { font-family:'Bangers', cursive; font-size:clamp(46px,9vw,84px); letter-spacing:.02em; line-height:.95;
+    text-shadow:3px 3px 0 var(--hot), 6px 6px 0 #7a0b3d; }
+  h1 .z { color:var(--violet); text-shadow:3px 3px 0 var(--cyan), 6px 6px 0 #0b4a7a; }
+  .lede { font-size:19px; color:#c7ccd6; margin-top:14px; }
+  .lede b { color:#fff; }
+  .meta { font-family:'Fragment Mono', monospace; font-size:12px; color:#7a8493; margin-top:10px; letter-spacing:.04em; }
+  .rule { height:1px; background:#ffffff1a; margin:26px 0; }
+
+  .compare { margin:22px 0; }
+  .compare h3 { font-family:'Fragment Mono', monospace; font-size:12px; color:#8a94a5; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+  #grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); }
+  #grid:empty::after { content:'click “＋ compare” on any version to stack it here and play them together'; color:#5a6472; font-family:'Fragment Mono', monospace; font-size:12px; }
+  .tile { border:1px solid #ffffff1c; border-radius:12px; overflow:hidden; background:#000; }
+  .tile .top { display:flex; align-items:center; gap:8px; padding:6px 10px; background:#12121e; font-family:'Fragment Mono', monospace; font-size:12px; }
+  .tile .top b { color:var(--cyan); }
+  .tile .x { margin-left:auto; cursor:pointer; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:7px; padding:2px 8px; }
   .tile iframe { width:100%; aspect-ratio:4/3; border:0; display:block; background:#000; }
-  .empty { color:#667; text-align:center; padding:40px 20px; font-size:13px; grid-column:1/-1; }
-  .links { padding:0 18px 40px; font-size:12px; color:#8a94a5; line-height:2; }
-  .links a { color:var(--cyan); text-decoration:none; } .links a:hover { text-decoration:underline; }
-  .links .n { color:var(--lime); }
+
+  article { padding:22px 0; border-top:1px solid #ffffff12; }
+  .vtag { font-family:'Bangers', cursive; font-size:30px; color:var(--lime); letter-spacing:.03em; }
+  .vtitle { font-family:'Fragment Mono', monospace; font-size:14px; color:#aeb6c2; margin-left:8px; }
+  .prompt { font-family:'Fragment Mono', monospace; font-size:14px; color:#dfe7ef; background:#14202b;
+    border-left:3px solid var(--cyan); border-radius:0 10px 10px 0; padding:11px 15px; margin:14px 0; }
+  .prompt .who { display:block; color:#5f93a3; font-size:11px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:5px; }
+  .explain { font-size:17px; color:#cfd4dd; }
+  .acts { margin-top:14px; display:flex; gap:10px; font-family:'Fragment Mono', monospace; }
+  .acts a, .acts button { font-family:'Fragment Mono', monospace; font-size:13px; cursor:pointer; border-radius:9px; padding:8px 14px; text-decoration:none; }
+  .play { background:var(--lime); color:#0a0a12; border:none; }
+  .add { background:transparent; color:#cfe; border:1px solid #ffffff22; }
+  .add:hover { border-color:var(--cyan); color:#fff; }
+  .foot { margin-top:36px; font-family:'Fragment Mono', monospace; font-size:12px; color:#667; }
+  .foot a { color:var(--cyan); text-decoration:none; }
 </style>
 </head>
 <body>
-<header>
-  <h1>AIR<span class="z">WAVES</span> · versions</h1>
-  <div class="hint">Click a version to add it as a <b>live tile</b> — add several to play/compare them <b>at the same time</b>.
-    Each tile is its own page: press <b>START</b> inside it and allow the camera (asked once). Heads-up: each tile runs its
-    own hand-tracking, so <b>2–3 at once</b> is comfortable; more will get heavy.</div>
-</header>
-<div class="chips" id="chips"></div>
-<div class="bar">
-  <button class="act" id="addAll">＋ add v0 & latest</button>
-  <button class="act ghost" id="clear">clear all</button>
+<div class="wrap">
+  <h1>AIR<span class="z">WAVES</span></h1>
+  <p class="lede">An instrument built <b>live, one prompt at a time</b> — a webcam, on-device hand tracking, and a
+    Web Audio synth. Below is the whole thing as a <b>playable changelog</b>: every version, the message that
+    caused it, and what changed. Hit <b>▶ play</b> to open one, or <b>＋ compare</b> to stack a few and play them together.</p>
+  <p class="meta">on-device (MediaPipe + WebGPU) · nothing uploaded · best on desktop Chrome/Edge with a webcam</p>
+
+  <div class="compare">
+    <h3>compare tray</h3>
+    <div id="grid"></div>
+  </div>
+
+  <div id="posts"></div>
+
+  <div class="foot">Part of the AIR family · <a href="https://airslice.dorkalev.com" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" target="_blank" rel="noopener">Dor Kalev</a>. Hand tracking by Google MediaPipe.</div>
 </div>
-<div id="grid"><div class="empty">no versions yet — click a version above to drop it in ▲</div></div>
-<div class="links" id="links"></div>
 
 <script>
-// each version is baked into ./versions/<tag>.html — served from THIS origin, no third party
-const RUN = (tag) => `./versions/${tag}.html`;
-const VERSIONS = [
-  ['v0', 'theremin — height=pitch, pinch=swell (first)'],
-  ['v1', 'finger-tap piano — thumb touches each finger'],
-  ['v2', 'sustain-while-held + release debounce'],
-  ['v3', 'generous contact + sensitivity toggle'],
-  ['v4', 'frame-to-frame hand tracking (smoothing)'],
-  ['v5', 'require an actual touch'],
-  ['v6', 'thumb line — drop a finger to it'],
-  ['v7', 'keyboard layout — low left / high right'],
-  ['v8', 'open hand = mute'],
-  ['v9', 'on-screen air piano — touch the keys (latest)'],
+const RUN = (tag) => `./versions/${tag}.html`;   // baked locally, same origin — no third party
+const V = [
+  ['v0', 'the air instrument', "let's do all of them", "First swing at an “air instrument”: a theremin. Raise a hand — vertical position sets the pitch (snapped to a scale so it can’t sound wrong), a pinch swells the volume, sideways pans. Two hands, two voices. Fun, but vague to actually play."],
+  ['v1', 'finger-tap piano', "the music should be when thumb touches the other fingers. four fingers on the right hand do re mi fa, four fingers on the left hand sol la si do", "Turned it into something you can actually finger: thumb-to-finger taps fixed notes. Right hand plays Do Re Mi Fa, left hand Sol La Si Do — a full octave across eight finger-taps."],
+  ['v2', 'sustain + debounce', "there should be some throttle or debounce, it plays too much often. sustain while held is nice", "It was machine-gunning. Swapped the per-touch pluck for sustain-while-held with a release debounce, so jitter at the contact edge can’t retrigger or cut a note."],
+  ['v3', 'looser + a dial', "now it barely plays anything. like it is too cautious", "Overcorrected. Loosened the contact threshold a lot and added a live sensitivity toggle so it could be dialled in the moment instead of guessed."],
+  ['v4', 'memory between frames', "the mapping of the hand should not be recalculated again and again without the memory of the former frame — it should carry frame to frame", "The real culprit: the render loop ran faster than the camera and kept recomputing against empty frames. Now each hand keeps its identity frame-to-frame, landmarks are smoothed, and dropped frames coast. This is where it started to feel solid."],
+  ['v5', 'require a real touch', "the thumb should absolutely touch the finger for it to play anything", "With tracking finally stable, tightened it back up so a note only fires on a genuine thumb-to-finger touch."],
+  ['v6', 'the thumb becomes a line', "i dont want the thumb to be the trigger, just for the playing finger to be on the same horizontal line as the thumb. the thumb doesn't do anything. dont show lines from thumb to fingers", "Rethought the gesture entirely: the thumb is just a horizontal reference line, and a finger sounds when it drops level with it. Removed the thumb-to-finger lines; drew the line instead."],
+  ['v7', 'laid out like a keyboard', "the order of the notes should be like in a musical keyboard, half screen divides between the two halves of the octave from DO to DO", "Made it read like a piano: screen split down the middle, low notes (Do–Fa) on the left, high (Sol–Do) on the right, fingers ascending left→right — assigned by which side your hand is on, not which hand."],
+  ['v8', 'open hand = stop', "open hand means stop playing", "Added a stop gesture: open your whole hand (all fingers extended) and that hand goes silent — a natural “hands up” mute."],
+  ['v9', 'an on-screen piano', "create another version where you show a piano on the screen and when each note is getting touched it plays", "A different instrument: a real on-screen piano with white and black keys. Any fingertip that lands on a key plays it — polyphonic, sustain while touched. Reuses the smoothed tracking from v4."],
+  ['v10', 'centered & transparent', "the keyboard shouldn't take the whole screen but it should be transparent and in the middle", "Made the piano less of a wall: smaller, centered, and semi-transparent so your hands read clearly through the keys."],
 ];
 
 const grid = document.getElementById('grid');
-function addTile(tag, desc) {
-  const empty = grid.querySelector('.empty'); if (empty) empty.remove();
+function addTile(tag, title) {
   const t = document.createElement('div'); t.className = 'tile';
-  t.innerHTML = `<div class="top"><b>${tag}</b> <span class="d">${desc}</span>
-    <span class="x">✕</span></div>
+  t.innerHTML = `<div class="top"><b>${tag}</b> <span>${title}</span><span class="x">✕</span></div>
     <iframe src="${RUN(tag)}" allow="camera; microphone; autoplay; fullscreen"></iframe>`;
-  t.querySelector('.x').onclick = () => { t.remove(); if (!grid.children.length) grid.innerHTML = '<div class="empty">no versions yet — click a version above ▲</div>'; };
-  grid.appendChild(t);
+  t.querySelector('.x').onclick = () => t.remove();
+  grid.appendChild(t); grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-// chips
-const chips = document.getElementById('chips');
-VERSIONS.forEach(([tag, desc]) => {
-  const c = document.createElement('button'); c.className = 'chip';
-  c.innerHTML = `<b>${tag}</b> <span class="d">${desc}</span>`;
-  c.onclick = () => addTile(tag, desc);
-  chips.appendChild(c);
+
+const posts = document.getElementById('posts');
+V.forEach(([tag, title, prompt, explain]) => {
+  const a = document.createElement('article');
+  a.innerHTML = `
+    <div><span class="vtag">${tag}</span><span class="vtitle">${title}</span></div>
+    <div class="prompt"><span class="who">the prompt</span>“${prompt}”</div>
+    <p class="explain">${explain}</p>
+    <div class="acts"><a class="play" href="${RUN(tag)}" target="_blank" rel="noopener">▶ play ${tag}</a>
+      <button class="add">＋ compare</button></div>`;
+  a.querySelector('.add').onclick = () => addTile(tag, title);
+  posts.appendChild(a);
 });
-document.getElementById('addAll').onclick = () => { addTile('v0', VERSIONS[0][1]); addTile('v9', VERSIONS[9][1]); };
-document.getElementById('clear').onclick = () => { grid.innerHTML = '<div class="empty">no versions yet — click a version above ▲</div>'; };
-// direct permalinks list
-document.getElementById('links').innerHTML = '<b style="color:#fff">Direct links (open in a new tab):</b><br>' +
-  VERSIONS.map(([tag, desc]) => `<span class="n">${tag}</span> — <a href="${RUN(tag)}" target="_blank" rel="noopener">▶ play</a> · <span style="color:#667">${desc}</span>`).join('<br>');
 </script>
 </body>
 </html>
