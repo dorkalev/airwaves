@@ -167,7 +167,14 @@ let showLabels = true;
 function draw() {
   ctx.clearRect(0, 0, W, H);
   // faint mirrored camera in the upper area
-  ctx.save(); ctx.globalAlpha = 0.42; ctx.translate(W, 0); ctx.scale(-1, 1); try { ctx.drawImage(video, 0, 0, W, H); } catch {} ctx.restore();
+  // camera, mirrored + COVER-fit (preserve aspect, center-crop) so it isn't skewed
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (vw && vh) {
+    const sc = Math.max(W / vw, H / vh), dw = vw * sc, dh = vh * sc, dx = (W - dw) / 2, dy = (H - dh) / 2;
+    ctx.save(); ctx.globalAlpha = 0.42; ctx.translate(W, 0); ctx.scale(-1, 1);
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch {}
+    ctx.restore();
+  }
 
   // white keys — semi-transparent so the hands show through
   for (let i = 0; i < 8; i++) {
