@@ -74,16 +74,23 @@ const KEYS = [
 ];
 const WHITE = [0, 2, 4, 5, 7, 9, 11, 12];          // 8 white keys, left→right
 const BLACK = [{ k:1, slot:1 }, { k:3, slot:2 }, { k:6, slot:4 }, { k:8, slot:5 }, { k:10, slot:6 }]; // sit at white-key boundaries
-let KB_TOP = 0, KB_BOT = 0, WK = 0;
-function layout() { W = cv.width = innerWidth*DPR; H = cv.height = innerHeight*DPR; cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px'; KB_TOP = H*0.50; KB_BOT = H*0.99; WK = W/8; }
+let KB_X0 = 0, KB_W = 0, KB_TOP = 0, KB_BOT = 0, WK = 0;
+function layout() {
+  W = cv.width = innerWidth*DPR; H = cv.height = innerHeight*DPR; cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
+  KB_W = Math.min(W * 0.72, H * 1.45);        // a centered keyboard, not the whole screen
+  KB_X0 = (W - KB_W) / 2; WK = KB_W / 8;
+  const kh = Math.min(H * 0.4, KB_W * 0.34);  // key height proportional to width
+  KB_TOP = H * 0.5 - kh / 2; KB_BOT = H * 0.5 + kh / 2;   // vertically centered
+}
 addEventListener('resize', layout); layout();
 const BLACK_H = () => (KB_BOT - KB_TOP) * 0.60;
 const blackHalf = () => WK * 0.30;
 // which key is at a screen point (device px)? black keys sit on top of the seam
 function keyAt(px, py) {
-  if (py < KB_TOP || py > KB_BOT) return -1;
-  if (py < KB_TOP + BLACK_H()) for (const bk of BLACK) { const cx = bk.slot*WK; if (px >= cx - blackHalf() && px <= cx + blackHalf()) return bk.k; }
-  const wi = Math.max(0, Math.min(7, Math.floor(px / WK)));
+  if (px < KB_X0 || px > KB_X0 + KB_W || py < KB_TOP || py > KB_BOT) return -1;
+  const lx = px - KB_X0;
+  if (py < KB_TOP + BLACK_H()) for (const bk of BLACK) { const cx = bk.slot*WK; if (lx >= cx - blackHalf() && lx <= cx + blackHalf()) return bk.k; }
+  const wi = Math.max(0, Math.min(7, Math.floor(lx / WK)));
   return WHITE[wi];
 }
 
@@ -160,24 +167,24 @@ let showLabels = true;
 function draw() {
   ctx.clearRect(0, 0, W, H);
   // faint mirrored camera in the upper area
-  ctx.save(); ctx.globalAlpha = 0.22; ctx.translate(W, 0); ctx.scale(-1, 1); try { ctx.drawImage(video, 0, 0, W, H); } catch {} ctx.restore();
+  ctx.save(); ctx.globalAlpha = 0.42; ctx.translate(W, 0); ctx.scale(-1, 1); try { ctx.drawImage(video, 0, 0, W, H); } catch {} ctx.restore();
 
-  // white keys
+  // white keys — semi-transparent so the hands show through
   for (let i = 0; i < 8; i++) {
-    const k = WHITE[i], x = i * WK, pressedGlow = Math.max(flash[k], on[k] ? 0.7 : 0);
+    const k = WHITE[i], x = KB_X0 + i * WK, kh = KB_BOT - KB_TOP, pressedGlow = Math.max(flash[k], on[k] ? 0.8 : 0);
     if (flash[k] > 0) flash[k] = Math.max(0, flash[k] - 0.05);
-    ctx.fillStyle = on[k] ? '#bfefff' : '#eef2f6'; ctx.fillRect(x + 1, KB_TOP, WK - 2, KB_BOT - KB_TOP);
-    if (pressedGlow > 0) { ctx.fillStyle = `rgba(41,244,255,${0.5 * pressedGlow})`; ctx.fillRect(x + 1, KB_TOP, WK - 2, KB_BOT - KB_TOP); }
-    ctx.strokeStyle = '#0a0a12'; ctx.lineWidth = 1.5 * DPR; ctx.strokeRect(x + 1, KB_TOP, WK - 2, KB_BOT - KB_TOP);
-    if (showLabels) { ctx.fillStyle = '#5a6472'; ctx.font = `${16 * DPR}px 'Fragment Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(KEYS[k].n, x + WK / 2, KB_BOT - 14 * DPR); }
+    ctx.fillStyle = 'rgba(238,242,246,0.22)'; ctx.fillRect(x + 1, KB_TOP, WK - 2, kh);
+    if (pressedGlow > 0) { ctx.fillStyle = `rgba(41,244,255,${0.55 * pressedGlow})`; ctx.fillRect(x + 1, KB_TOP, WK - 2, kh); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5 * DPR; ctx.strokeRect(x + 1, KB_TOP, WK - 2, kh);
+    if (showLabels) { ctx.fillStyle = '#dfe7ef'; ctx.font = `${15 * DPR}px 'Fragment Mono', monospace`; ctx.textAlign = 'center'; ctx.fillText(KEYS[k].n, x + WK / 2, KB_BOT - 12 * DPR); }
   }
-  // black keys on top
+  // black keys on top — darker translucent
   for (const bk of BLACK) {
-    const cx = bk.slot * WK, w = blackHalf() * 2, k = bk.k, pressedGlow = Math.max(flash[k], on[k] ? 0.8 : 0);
+    const cx = KB_X0 + bk.slot * WK, w = blackHalf() * 2, k = bk.k, pressedGlow = Math.max(flash[k], on[k] ? 0.9 : 0);
     if (flash[k] > 0) flash[k] = Math.max(0, flash[k] - 0.05);
-    ctx.fillStyle = on[k] ? '#1a5566' : '#14151c'; ctx.fillRect(cx - w / 2, KB_TOP, w, BLACK_H());
-    if (pressedGlow > 0) { ctx.fillStyle = `rgba(41,244,255,${0.6 * pressedGlow})`; ctx.fillRect(cx - w / 2, KB_TOP, w, BLACK_H()); }
-    ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * DPR; ctx.strokeRect(cx - w / 2, KB_TOP, w, BLACK_H());
+    ctx.fillStyle = 'rgba(10,11,18,0.55)'; ctx.fillRect(cx - w / 2, KB_TOP, w, BLACK_H());
+    if (pressedGlow > 0) { ctx.fillStyle = `rgba(41,244,255,${0.7 * pressedGlow})`; ctx.fillRect(cx - w / 2, KB_TOP, w, BLACK_H()); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5 * DPR; ctx.strokeRect(cx - w / 2, KB_TOP, w, BLACK_H());
   }
   // fingertip cursors
   for (const t of touches) {
