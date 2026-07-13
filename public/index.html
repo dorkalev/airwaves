@@ -62,7 +62,7 @@
     <div class="tag">A FINGER-TAP PIANO IN THE AIR</div>
     <p class="sub">It's laid out like a keyboard: <b>low notes on the left half</b> of the screen, <b>high on the right</b>.
       Put a hand on each side — left plays <b>Do Re Mi Fa</b>, right plays <b>Sol La Si Do</b>, ascending left→right.
-      To sound a note, <b>drop that finger down to your thumb's line</b> (lift it to stop) — the thumb is just the line.
+      To sound a note, <b>drop that finger down to your thumb's line</b>; <b>open your whole hand to stop</b> — the thumb is just the line.
       Hand tracking runs <b>100% on-device</b> (MediaPipe + WebGPU); synth is pure Web Audio.</p>
     <button class="btn" id="start">START ▸</button>
     <div class="privacy">on-device hand tracking · MediaPipe + WebGPU · nothing uploaded</div>
@@ -89,6 +89,7 @@ const NOTES = [
   { n:'Sol', f:392.00 }, { n:'La', f:440.00 }, { n:'Si', f:493.88 }, { n:'Do', f:523.25 },
 ];
 const FINGER_TIPS = [8, 12, 16, 20];   // index, middle, ring, pinky
+const FINGER_MCP  = [5, 9, 13, 17];    // their base knuckles (for open-hand detection)
 const HAND_COLORS = ['#29f4ff', '#ff2e88'];
 let octave = 0, swap = false;
 
@@ -223,19 +224,24 @@ function processHands(hands, handed) {
   present.forEach(s => {
     const lm = tracked[s].sm, base = baseOf[s], thumb = lm[4];
     const handScale = dist(lm[0], lm[9]) || 0.2;
+    // open hand = all fingers extended (tip far from its knuckle) → stop playing
+    let extended = 0;
+    for (let f = 0; f < 4; f++) if (dist(lm[FINGER_TIPS[f]], lm[FINGER_MCP[f]]) / handScale > 0.78) extended++;
+    const openHand = extended >= 4;
     // rank the 4 fingertips by screen-x → leftmost finger = lowest note
     const order = FINGER_TIPS.map((ti, f) => ({ f, x: 1 - lm[ti].x })).sort((p, q) => p.x - q.x);
     const fingerVoice = [0, 0, 0, 0];
     order.forEach((o, rank) => { fingerVoice[o.f] = base + rank; });
     for (let f = 0; f < 4; f++) {
       const vi = fingerVoice[f]; seen[vi] = true;
+      if (openHand) { if (on[vi]) { on[vi] = false; noteOff(vi); } offCount[vi] = 0; continue; }  // open palm = silence
       // play when the fingertip is on the thumb's horizontal line (same Y)
       const dy = Math.abs(lm[FINGER_TIPS[f]].y - thumb.y) / handScale;
       if (!on[vi]) { if (dy < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; } }
       else if (dy > OFF_T) { if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); } }
       else offCount[vi] = 0;
     }
-    drawHands.push({ lm, color: HAND_COLORS[base === 0 ? 0 : 1], fingerVoice });
+    drawHands.push({ lm, color: HAND_COLORS[base === 0 ? 0 : 1], fingerVoice, open: openHand });
   });
   for (let i = 0; i < 8; i++) if (!seen[i] && on[i]) { on[i] = false; noteOff(i); }
   presentCount = present.length;
@@ -257,13 +263,17 @@ function draw() {
   ctx.restore();
 
   for (const hnd of drawHands) {
-    const { lm, color, fingerVoice } = hnd;
+    const { lm, color, fingerVoice, open } = hnd;
     const thumb = lm[4], ty = thumb.y * H;
     // the "note line": a horizontal guide at the thumb's height across the hand
     let minx = 1, maxx = 0; for (const p of lm) { const sx = 1 - p.x; if (sx < minx) minx = sx; if (sx > maxx) maxx = sx; }
-    ctx.strokeStyle = color; ctx.globalAlpha = 0.35; ctx.lineWidth = 2 * DPR; ctx.setLineDash([7 * DPR, 7 * DPR]);
+    ctx.strokeStyle = open ? '#66707e' : color; ctx.globalAlpha = open ? 0.15 : 0.35; ctx.lineWidth = 2 * DPR; ctx.setLineDash([7 * DPR, 7 * DPR]);
     ctx.beginPath(); ctx.moveTo((minx - 0.03) * W, ty); ctx.lineTo((maxx + 0.03) * W, ty); ctx.stroke(); ctx.setLineDash([]);
-    ctx.globalAlpha = 0.75; ctx.fillStyle = color; ctx.beginPath(); ctx.arc((1 - thumb.x) * W, ty, 5 * DPR, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.75; ctx.fillStyle = open ? '#66707e' : color; ctx.beginPath(); ctx.arc((1 - thumb.x) * W, ty, 5 * DPR, 0, 7); ctx.fill();
+    if (open) {   // open palm = muted
+      const wx = (1 - lm[0].x) * W, wy = lm[0].y * H;
+      ctx.globalAlpha = 0.7; ctx.font = `${26 * DPR}px serif`; ctx.textAlign = 'center'; ctx.fillText('✋', wx, wy + 40 * DPR);
+    }
     for (let f = 0; f < 4; f++) {
       const vi = fingerVoice[f], tip = lm[FINGER_TIPS[f]];
       const px = (1 - tip.x) * W, py = tip.y * H;
