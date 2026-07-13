@@ -111,7 +111,12 @@ pvFrame.onload = () => {
   try {
     const doc = pvFrame.contentDocument; if (!doc) return;
     const btn = doc.getElementById('start');
-    if (btn) { doc.getElementById('boot')?.classList.add('gone'); btn.click(); cover.classList.add('hidden'); }
+    if (btn) {
+      const boot = doc.getElementById('boot');
+      if (boot) { boot.style.transition = 'none'; boot.style.display = 'none'; }   // remove the landing INSTANTLY (no fade)
+      btn.click();                                                                 // start the app
+      requestAnimationFrame(() => cover.classList.add('hidden'));                  // reveal only after the landing is gone
+    }
   } catch (e) {}
 };
 document.getElementById('pvFull').onclick = () => (pvFrame.requestFullscreen || pvFrame.webkitRequestFullscreen)?.call(pvFrame);
