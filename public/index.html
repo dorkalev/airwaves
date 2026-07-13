@@ -156,51 +156,79 @@ const SENS_ORDER = ['high', 'med', 'low'];
 let sens = 'high', ON_T = SENS.high.on, OFF_T = SENS.high.off;
 const REL_FRAMES = 3;                              // frames of clear separation before a note stops
 let running = false, lastVideoTime = -1;
-let drawHands = [];   // [{lm, base, color}]
+let drawHands = [], presentCount = 0;
+// persistent per-hand state so tracking carries frame→frame (no blind recompute)
+const tracked = [null, null];     // slot = { sm:[{x,y,z}×21], label, missing }
+const SM = 0.55;                  // landmark smoothing (EMA toward the new frame)
+const COAST = 6;                  // keep a hand alive this many frames after it drops
+const MATCH_D = 0.30;             // wrist-distance to match a detection to a slot
 
 function loop() {
   if (!running) return;
   requestAnimationFrame(loop);
-  let hands = [], handed = [];
+  // only touch tracking/notes when the CAMERA produced a new frame; otherwise
+  // coast on the last state (the render loop is faster than the camera)
   if (handLandmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
+    let hands = [], handed = [];
     try { const r = handLandmarker.detectForVideo(video, performance.now()); hands = r.landmarks || []; handed = r.handedness || []; } catch {}
+    processHands(hands, handed);
   }
-  drawHands = [];
-  const seen = new Array(8).fill(false);   // which voices had their hand present this frame
-  let lowerTaken = false, upperTaken = false;
-
-  hands.forEach((lm, h) => {
-    // decide tetrachord: MediaPipe handedness ('Right'→lower), with a swap fallback
-    let label = handed[h]?.[0]?.categoryName || (h === 0 ? 'Right' : 'Left');
-    let isLower = (label === 'Right');
-    if (swap) isLower = !isLower;
-    // avoid both hands grabbing the same tetrachord
-    if (isLower && lowerTaken) isLower = false; if (!isLower && upperTaken) isLower = true;
-    if (isLower) lowerTaken = true; else upperTaken = true;
-    const base = isLower ? 0 : 4;
-
-    const thumb = lm[4];
-    const handScale = dist(lm[0], lm[9]) || 0.2;    // wrist → middle-MCP, for distance-invariance
-    for (let f = 0; f < 4; f++) {
-      const vi = base + f;
-      seen[vi] = true;
-      const d = dist(thumb, lm[FINGER_TIPS[f]]) / handScale;
-      if (!on[vi]) {
-        if (d < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; }   // attack once
-      } else if (d > OFF_T) {
-        if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); }              // release, debounced
-      } else offCount[vi] = 0;                                                          // still held
-    }
-    drawHands.push({ lm, base, color: HAND_COLORS[isLower ? 0 : 1] });
-  });
-
-  // hand vanished → release its held notes
-  for (let i = 0; i < 8; i++) if (!seen[i] && on[i]) { on[i] = false; noteOff(i); }
-  draw(hands.length);
+  draw();
 }
 
-function draw(nHands) {
+// match detections to persistent slots, smooth them, coast dropouts, play notes
+function processHands(hands, handed) {
+  const used = [false, false], assign = new Array(hands.length).fill(-1);
+  // pass 1: match each detection to the nearest existing slot (by wrist)
+  hands.forEach((lm, h) => {
+    let s = -1, bd = MATCH_D;
+    for (let k = 0; k < 2; k++) if (tracked[k] && !used[k]) { const d = dist(tracked[k].sm[0], lm[0]); if (d < bd) { bd = d; s = k; } }
+    if (s >= 0) { used[s] = true; assign[h] = s; }
+  });
+  // pass 2: unmatched detections → a free slot (a hand that just appeared)
+  hands.forEach((lm, h) => {
+    if (assign[h] >= 0) return;
+    let s = -1; for (let k = 0; k < 2; k++) if (!used[k]) { s = k; break; }
+    if (s < 0) return;
+    tracked[s] = { sm: lm.map(p => ({ x:p.x, y:p.y, z:p.z })), label: handed[h]?.[0]?.[0]?.categoryName || handed[h]?.[0]?.categoryName || 'Right', missing: 0 };
+    used[s] = true; assign[h] = s;
+  });
+  // smooth matched slots toward the new landmarks
+  hands.forEach((lm, h) => {
+    const s = assign[h]; if (s < 0) return; const t = tracked[s];
+    for (let i = 0; i < lm.length; i++) { t.sm[i].x += (lm[i].x - t.sm[i].x) * SM; t.sm[i].y += (lm[i].y - t.sm[i].y) * SM; t.sm[i].z += (lm[i].z - t.sm[i].z) * SM; }
+    t.missing = 0;
+  });
+  // coast slots that dropped this frame; retire ones gone too long
+  for (let s = 0; s < 2; s++) if (tracked[s] && !used[s]) { if (++tracked[s].missing <= COAST) used[s] = true; else tracked[s] = null; }
+
+  // stable tetrachord per present hand (label locked at birth; swap applies live)
+  const present = [0, 1].filter(s => tracked[s] && used[s]);
+  const role = {};
+  present.forEach(s => { let low = tracked[s].label === 'Right'; if (swap) low = !low; role[s] = low; });
+  if (present.length === 2 && role[present[0]] === role[present[1]]) role[present[1]] = !role[present[0]];
+
+  // contact → sustained notes (on smoothed landmarks)
+  const seen = new Array(8).fill(false);
+  drawHands = [];
+  present.forEach(s => {
+    const lm = tracked[s].sm, base = role[s] ? 0 : 4, thumb = lm[4];
+    const handScale = dist(lm[0], lm[9]) || 0.2;
+    for (let f = 0; f < 4; f++) {
+      const vi = base + f; seen[vi] = true;
+      const d = dist(thumb, lm[FINGER_TIPS[f]]) / handScale;
+      if (!on[vi]) { if (d < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; } }
+      else if (d > OFF_T) { if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); } }
+      else offCount[vi] = 0;
+    }
+    drawHands.push({ lm, base, color: HAND_COLORS[role[s] ? 0 : 1] });
+  });
+  for (let i = 0; i < 8; i++) if (!seen[i] && on[i]) { on[i] = false; noteOff(i); }
+  presentCount = present.length;
+}
+
+function draw() {
   ctx.clearRect(0, 0, W, H);
   ctx.save(); ctx.globalAlpha = 0.26; ctx.translate(W, 0); ctx.scale(-1, 1);
   try { ctx.drawImage(video, 0, 0, W, H); } catch {}
@@ -231,7 +259,7 @@ function draw(nHands) {
     }
   }
   ctx.globalAlpha = 1;
-  if (nHands === 0) setStatus('raise a hand ✋ — tap thumb to a finger', 'warn');
+  if (presentCount === 0) setStatus('raise a hand ✋ — tap thumb to a finger', 'warn');
   else if ($('status').textContent !== 'playing 🎶') setStatus('playing 🎶');
 }
 
