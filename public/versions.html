@@ -46,11 +46,14 @@
   .pv-bar button { cursor:pointer; background:transparent; border:1px solid #ffffff22; color:#cfe; border-radius:8px; padding:5px 11px; }
   .pv-bar button:hover { border-color:var(--cyan); color:#fff; }
   .stage { flex:1 1 auto; min-height:0; position:relative; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-  .rgal { flex:0 0 34%; display:flex; flex-direction:column; border-top:1px solid #ffffff1c; background:#0a0a12; }
-  .rgbar { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; font-family:'Fragment Mono', monospace; font-size:12px; color:#8a94a5; letter-spacing:.06em; }
-  .rgbar button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:11px; color:#cfe; background:transparent; border:1px solid #ffffff22; border-radius:8px; padding:4px 10px; }
-  .rgbar button:hover { border-color:var(--cyan); }
-  .rggrid { flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; padding:0 12px 12px; align-content:start; }
+  /* the gallery is a fixed height (≈ one video row + 20%) that scrolls — so it
+     never shrinks the demo frame as more sessions come in */
+  .rgal { flex:0 0 auto; display:flex; flex-direction:column; border-top:1px solid #ffffff1c; background:#0a0a12; }
+  .rgbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; font-family:'Fragment Mono', monospace; font-size:12px; color:#8a94a5; letter-spacing:.06em; }
+  .rgbar .rgacts { display:flex; gap:6px; flex:none; }
+  .rgbar button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:13px; line-height:1; color:#cfe; background:transparent; border:1px solid #ffffff22; border-radius:8px; padding:5px 9px; }
+  .rgbar button:hover { border-color:var(--cyan); color:#fff; }
+  .rggrid { overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; padding:0 12px 12px; align-content:start; }
   .gcard { background:#12121e; border:1px solid #ffffff14; border-radius:10px; overflow:hidden; position:relative; }
   .gcard video { width:100%; aspect-ratio:4/3; object-fit:cover; background:#000; display:block; cursor:zoom-in; }
   .gcard .gm { padding:5px 8px; font-size:10px; color:#889; }
@@ -62,8 +65,8 @@
   .rgbar .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--lime); margin-right:6px; vertical-align:1px; animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity:.2; } }
   /* clips are dark until they actually play (paused → back to dark) */
-  .gcard .gv { position:relative; }
-  .gcard video { filter:brightness(.42); transition:filter .25s ease; }
+  .gcard .gv { position:relative; aspect-ratio:4/3; }
+  .gcard video { width:100%; height:100%; object-fit:cover; background:#000; display:block; filter:brightness(.42); transition:filter .25s ease; }
   .gcard video.live { filter:none; }
   .gcard .mx { position:absolute; bottom:6px; right:6px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   .gcard .mx:hover { border-color:var(--cyan); color:#fff; }
@@ -81,6 +84,14 @@
   #pvConfirm .b { display:flex; gap:10px; justify-content:center; margin-top:20px; }
   #pvConfirm button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:13px; border-radius:9px; padding:9px 18px; border:1px solid #ffffff22; background:transparent; color:#cfe; }
   #pvConfirm .yes { background:var(--hot); border:none; color:#fff; font-weight:bold; }
+  /* full gallery modal */
+  #rgalMaxModal { position:fixed; inset:0; z-index:190; display:none; place-items:center; background:#0a0a12ee; backdrop-filter:blur(8px); padding:24px; }
+  #rgalMaxModal.show { display:grid; }
+  #rgalMaxModal .gw { width:min(1100px,94vw); max-height:90vh; display:flex; flex-direction:column; background:#0c0c14; border:1px solid #ffffff1c; border-radius:16px; overflow:hidden; }
+  #rgalMaxModal .gt { display:flex; justify-content:space-between; align-items:center; padding:13px 18px; font-family:'Bangers', cursive; font-size:24px; color:var(--cyan); letter-spacing:.03em; border-bottom:1px solid #ffffff14; }
+  #rgalMaxModal .gt button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:12px; color:#cfe; background:transparent; border:1px solid #ffffff22; border-radius:8px; padding:5px 11px; }
+  #rgalMaxModal .gt button:hover { border-color:var(--cyan); }
+  #rgalMaxModal .mgrid { overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; padding:16px; align-content:start; }
   #pvFrame { border:0; background:#000; }   /* sized by JS to a centered 4:3 box (matches the camera) */
   /* cover the frame while a version boots so its landing/START never flashes */
   #cover { position:absolute; inset:0; z-index:2; display:grid; place-items:center; text-align:center; color:#667;
@@ -118,7 +129,7 @@
       <div id="cover"><div><div class="big">▸</div><span id="coverText">click “open” on any version — it loads here paused; press play to start</span></div></div>
     </div>
     <div class="rgal">
-      <div class="rgbar"><span class="live"><span class="dot"></span>all sessions — <b>updating live</b></span><button id="rgalRefresh">↻ refresh</button></div>
+      <div class="rgbar"><span class="live"><span class="dot"></span>all sessions — <b>updating live</b></span><span class="rgacts"><button id="rgalMax" title="expand gallery">⛶</button><button id="rgalRefresh" title="refresh">↻</button></span></div>
       <div class="rggrid" id="rgalGrid"></div>
     </div>
   </div>
@@ -247,19 +258,31 @@ function confirmDelete(onYes) {
   m.querySelector('.yes').onclick = () => { m.classList.remove('show'); onYes(); };
 }
 
-function makeCard(s) {
+function makeCard(s, container) {
+  const scope = container || grid;
   const el = document.createElement('div'); el.className = 'gcard fresh';
   el.innerHTML = `<div class="gv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
   const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-  v.addEventListener('play', () => { v.classList.add('live'); grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
-  v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                  // dim back to the start
+  v.addEventListener('play', () => { v.classList.add('live'); scope.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
+  v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                   // dim back to the start
   v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } };
   el.querySelector('.mx').onclick = () => openLight(getUrl(s.item).catch(() => null));
   if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'remove yours';
-    rm.onclick = () => confirmDelete(async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); cards.delete(s.name); } catch (e) { rm.textContent = '!'; } }); el.appendChild(rm); }
+    rm.onclick = () => confirmDelete(async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); cards.get(s.name)?.remove(); cards.delete(s.name); } catch (e) { rm.textContent = '!'; } }); el.appendChild(rm); }
   setTimeout(() => el.classList.remove('fresh'), 1300);
   return el;
 }
+// keep the strip ≈ one video row + 20% tall, and let the rest scroll.
+// derive the row height from the card WIDTH (reliable even before videos load):
+// a 4:3 video + the date strip.
+function rowHeightOf(g) { const c = g.querySelector('.gcard'); return c ? Math.round(c.offsetWidth * 3 / 4 + 24) : 0; }  // 4:3 video + date strip
+function sizeGallery() {
+  const rowH = rowHeightOf(grid);
+  if (!rowH) { grid.style.height = ''; return; }
+  grid.style.gridAutoRows = rowH + 'px';                 // pin rows (grid auto-rows collapse aspect-ratio items)
+  grid.style.height = Math.round(rowH * 1.2) + 'px';     // ≈ one row + 20%
+}
+addEventListener('resize', sizeGallery);
 // full=true rebuilds from scratch (initial load / manual refresh); otherwise
 // just prepend sessions we haven't shown yet — the "watch it fill up" path.
 async function loadGallery(full) {
@@ -271,9 +294,32 @@ async function loadGallery(full) {
     if (!items.length && !cards.size) { grid.innerHTML = '<div class="gempty">no sessions yet — play a version to add one</div>'; return; }
     const incoming = items.filter(s => !cards.has(s.name));
     for (const s of incoming.reverse()) { const el = makeCard(s); cards.set(s.name, el); grid.prepend(el); }  // reverse → keeps newest at top
+    requestAnimationFrame(sizeGallery);
   } catch (e) { if (!cards.size) { console.error(e); grid.innerHTML = '<div class="gempty">gallery unavailable — on localhost this needs the App Check debug token registered</div>'; } }
 }
+
+// expand the whole gallery into a modal with every session
+async function openMaxGallery() {
+  let m = document.getElementById('rgalMaxModal');
+  if (!m) { m = document.createElement('div'); m.id = 'rgalMaxModal';
+    m.innerHTML = `<div class="gw"><div class="gt"><span>All sessions</span><button class="mxc">✕ close</button></div><div class="mgrid" id="rgalMaxGrid"></div></div>`;
+    document.body.appendChild(m);
+    const close = () => { m.querySelectorAll('video').forEach(v => v.pause()); m.classList.remove('show'); };
+    m.onclick = e => { if (e.target === m) close(); }; m.querySelector('.mxc').onclick = close;
+  }
+  const mg = m.querySelector('#rgalMaxGrid'); mg.innerHTML = '<div class="gempty">loading…</div>'; m.classList.add('show');
+  try {
+    let token = null, all = [];
+    do { const { items, next } = await listSessions(token, 100); all.push(...items); token = next; } while (token);   // every session
+    mg.innerHTML = '';
+    if (!all.length) { mg.innerHTML = '<div class="gempty">no sessions yet</div>'; return; }
+    for (const s of all) mg.appendChild(makeCard(s, mg));   // newest-first, same as the strip
+    requestAnimationFrame(() => { const r = rowHeightOf(mg); if (r) mg.style.gridAutoRows = r + 'px'; });
+  } catch (e) { mg.innerHTML = '<div class="gempty">gallery unavailable — on localhost this needs the App Check debug token registered</div>'; }
+}
+
 document.getElementById('rgalRefresh').onclick = () => loadGallery(true);
+document.getElementById('rgalMax').onclick = openMaxGallery;
 window.reloadGallery = () => loadGallery(false);
 loadGallery(true);
 setInterval(() => { if (!document.hidden) loadGallery(false); }, 4000);   // live: poll the newest page, add what's new
