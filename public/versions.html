@@ -178,6 +178,7 @@ function fitFrame() {
   let w = cw, h = w / AR; if (h > ch) { h = ch; w = h * AR; }
   pvFrame.style.width = Math.round(w) + 'px'; pvFrame.style.height = Math.round(h) + 'px';
 }
+window.fitFrame = fitFrame;
 addEventListener('resize', fitFrame); fitFrame();
 // open PAUSED: reveal the version's own landing — its play button and the
 // recording consent — so the visitor starts it (and the camera) themselves.
@@ -278,9 +279,9 @@ function makeCard(s, container) {
 function rowHeightOf(g) { const c = g.querySelector('.gcard'); return c ? Math.round(c.offsetWidth * 3 / 4 + 24) : 0; }  // 4:3 video + date strip
 function sizeGallery() {
   const rowH = rowHeightOf(grid);
-  if (!rowH) { grid.style.height = ''; return; }
-  grid.style.gridAutoRows = rowH + 'px';                 // pin rows (grid auto-rows collapse aspect-ratio items)
-  grid.style.height = Math.round(rowH * 1.2) + 'px';     // ≈ one row + 20%
+  grid.style.height = rowH ? Math.round(rowH * 1.2) + 'px' : '';   // ≈ one row + 20%
+  if (rowH) grid.style.gridAutoRows = rowH + 'px';                 // pin rows (grid auto-rows collapse aspect-ratio items)
+  window.fitFrame && window.fitFrame();                            // gallery height changed → refit the demo frame
 }
 addEventListener('resize', sizeGallery);
 // full=true rebuilds from scratch (initial load / manual refresh); otherwise
