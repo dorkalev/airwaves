@@ -4,7 +4,7 @@
 //  - a 🖼 gallery button (remove-your-own)
 // Audio is captured generically by tapping every AudioContext's connection to
 // its destination — so it works on any version without editing the app.
-import { uploadSession, listSessions, getUrl, getPosterUrl, deleteSession, rememberMine, forgetMine, isMine } from './firebase.js';
+import { sessionName, uploadTo, deleteByName, listSessions, getUrl, getPosterUrl, deleteSession, rememberMine, forgetMine, isMine } from './firebase.js?v=2';
 
 // ---- tap all app audio: mirror any -> ctx.destination into a capture node ----
 (function () {
@@ -29,6 +29,7 @@ const audioTracks = () => { const t = []; (window.__airCtxs || []).forEach(c => 
 const LS = 'air-rec-consent';
 let consent = localStorage.getItem(LS);   // 'on' | 'off' | null
 let recorder = null, chunks = [], done = false, capT = null, armed = false;
+let sessionPath = null, posterDone = false, flushT = null, flushing = false, stopCopy = null;
 
 // ---- UI ----
 const style = document.createElement('style');
@@ -84,24 +85,50 @@ function startCapture() {
   if (recorder || consent !== 'on') return;
   const cv = document.querySelector('canvas'); if (!cv) { setTimeout(startCapture, 800); return; }
   try {
-    const mixed = new MediaStream([...cv.captureStream(30).getVideoTracks(), ...audioTracks()]);
-    chunks = []; done = false;
+    // downscale a copy of the app canvas → small, well-compressed clips (cheap to stream)
+    const RW = 426, sc = Math.min(1, RW / (cv.width || RW));
+    const rc = document.createElement('canvas');
+    rc.width = Math.max(2, Math.round((cv.width || RW) * sc));
+    rc.height = Math.max(2, Math.round((cv.height || RW * 0.56) * sc));
+    const rctx = rc.getContext('2d');
+    let copying = true; stopCopy = () => { copying = false; };
+    (function copy() { if (!copying) return; try { rctx.drawImage(cv, 0, 0, rc.width, rc.height); } catch (e) {} requestAnimationFrame(copy); })();
+    const mixed = new MediaStream([...rc.captureStream(24).getVideoTracks(), ...audioTracks()]);
+    chunks = []; done = false; sessionPath = null; posterDone = false;
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
-    recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 1_200_000 });
+    recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 600_000 });
     recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     recorder.onstop = finish;
-    recorder.start(); refresh();
-    capT = setTimeout(() => stopCapture(false), 90000);
+    recorder.start(1000);                              // 1s timeslice → chunks accumulate
+    refresh();
+    flushT = setInterval(flush, 15000);                // continuously save every 15s (no reliance on a clean close)
+    capT = setTimeout(() => stopCapture(false), 120000);  // bound total session length
   } catch (e) { console.warn('capture failed', e); recorder = null; }
 }
-function stopCapture(discard) { if (capT) { clearTimeout(capT); capT = null; } if (recorder && recorder.state !== 'inactive') { recorder.__discard = discard; recorder.stop(); } }
+// re-upload the growing clip to one fixed filename — "streaming" without append complexity
+async function flush() {
+  if (consent !== 'on' || flushing || !chunks.length) return;
+  flushing = true;
+  try {
+    if (!sessionPath) sessionPath = sessionName('webm');
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    if (blob.size < 20000) return;
+    let poster = null;
+    if (!posterDone) { const cv = document.querySelector('canvas'); poster = cv ? await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7)) : null; }
+    await uploadTo(sessionPath, blob, poster);
+    if (!posterDone) { posterDone = true; rememberMine(sessionPath); }
+  } catch (e) { console.warn('flush failed', e); } finally { flushing = false; }
+}
+function stopCapture(discard) {
+  if (flushT) { clearInterval(flushT); flushT = null; }
+  if (capT) { clearTimeout(capT); capT = null; }
+  if (recorder && recorder.state !== 'inactive') { recorder.__discard = discard; recorder.stop(); }
+}
 async function finish() {
   if (done) return; done = true;
-  const discard = recorder && recorder.__discard, cv = document.querySelector('canvas');
-  const blob = new Blob(chunks, { type: 'video/webm' }); recorder = null; refresh();
-  if (discard || blob.size < 20000) return;
-  try { const poster = cv ? await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7)) : null; rememberMine(await uploadSession(blob, 'webm', poster)); }
-  catch (e) { console.error('session upload failed', e); }
+  const discard = recorder && recorder.__discard; recorder = null; if (stopCopy) { stopCopy(); stopCopy = null; } refresh();
+  if (discard) { if (sessionPath) { forgetMine(sessionPath); deleteByName(sessionPath); } return; }   // toggled off → drop what streamed
+  await flush();                                       // final save
 }
 
 // ---- gallery ----

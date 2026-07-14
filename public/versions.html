@@ -208,7 +208,7 @@ V.forEach(([tag, title, prompt, explain]) => {
 
 <script type="module">
 // "all sessions" gallery under the app — reads the shared Firebase (demos/airwaves/)
-import { listSessions, getUrl, getPosterUrl, deleteSession, isMine, forgetMine } from './firebase.js';
+import { listSessions, getUrl, getPosterUrl, deleteSession, isMine, forgetMine } from './firebase.js?v=2';
 const grid = document.getElementById('rgalGrid');
 async function loadGallery() {
   grid.innerHTML = '<div class="gempty">loading…</div>';

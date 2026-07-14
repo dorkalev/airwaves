@@ -56,6 +56,20 @@ export async function uploadSession(blob, ext, posterBlob) {
   }
   return name;
 }
+// upload (or overwrite) a session at a FIXED name — used for periodic "streaming"
+// flushes so the clip is continuously saved without relying on a clean close.
+export async function uploadTo(name, blob, posterBlob) {
+  const { st, storage, uid } = await getFirebase();
+  if (!uid) throw new Error('sign-in unavailable');
+  await st.uploadBytes(st.ref(storage, name), blob, {
+    contentType: blob.type || 'video/webm', cacheControl: 'no-cache',
+    customMetadata: { owner: uid, demo: DEMO },
+  });
+  if (posterBlob) {
+    try { await st.uploadBytes(st.ref(storage, `${POST}/${baseOf(name)}.jpg`), posterBlob, { contentType: 'image/jpeg', customMetadata: { owner: uid, demo: DEMO } }); } catch {}
+  }
+  return name;
+}
 export async function listSessions(pageToken = null, pageSize = 24) {
   const { st, storage } = await getFirebase();
   const res = await st.list(st.ref(storage, SESS), { maxResults: pageSize, pageToken });
@@ -70,6 +84,11 @@ export async function deleteSession(item) {
   const { st, storage } = await getFirebase();
   await st.deleteObject(item);
   try { await st.deleteObject(st.ref(storage, `${POST}/${baseOf(item.name)}.jpg`)); } catch {}
+}
+export async function deleteByName(name) {
+  const { st, storage } = await getFirebase();
+  try { await st.deleteObject(st.ref(storage, name)); } catch {}
+  try { await st.deleteObject(st.ref(storage, `${POST}/${baseOf(name)}.jpg`)); } catch {}
 }
 
 // ownership tracked locally (metadata.owner enforces it server-side)

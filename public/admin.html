@@ -42,7 +42,7 @@
   </div>
 </div>
 <script type="module">
-import { getFirebase, listSessions, getUrl, getPosterUrl, deleteSession, ADMIN_EMAIL, DEMO } from './firebase.js';
+import { getFirebase, listSessions, getUrl, getPosterUrl, deleteSession, ADMIN_EMAIL, DEMO } from './firebase.js?v=2';
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 const $ = id => document.getElementById(id);
 const { auth } = await getFirebase();
