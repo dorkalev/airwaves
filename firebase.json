@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "site": "airwaves-dorkalev",
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/admin", "destination": "/admin.html" },
+      { "source": "/versions", "destination": "/versions.html" }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(html|js|mjs)",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "**",
+        "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }]
+      }
+    ]
+  }
+}
