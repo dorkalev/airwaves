@@ -21,8 +21,14 @@
   .lede { font-size:17px; color:#c7ccd6; margin-top:12px; } .lede b { color:#fff; }
   .meta { font-family:'Fragment Mono', monospace; font-size:11px; color:#7a8493; margin-top:9px; letter-spacing:.04em; }
 
-  .notice { margin:14px 0 4px; font-size:13px; color:#ffd9a8; background:#2a1c0e; border:1px solid #ffb02e44; border-left:3px solid #ffb02e; border-radius:0 10px 10px 0; padding:10px 14px; line-height:1.5; }
-  .notice b { color:#fff; }
+  /* AIRSLICE-style heads-up modal */
+  #heads { position:fixed; inset:0; z-index:100; display:grid; place-items:center; padding:24px; background:#0a0a12ee; backdrop-filter:blur(8px); }
+  #heads.gone { display:none; }
+  #heads .hcard { max-width:470px; text-align:center; background:#12121e; border:1px solid #ffffff1c; border-radius:18px; padding:32px 28px; box-shadow:0 20px 60px #000a; }
+  #heads h2 { font-family:'Bangers', cursive; font-size:42px; color:#ffb02e; text-shadow:2px 2px 0 #7a5410; letter-spacing:.02em; line-height:1; }
+  #heads p { font-size:15px; line-height:1.8; color:#cfd4dd; margin-top:14px; } #heads b { color:#fff; }
+  #heads button { font-family:'Bangers', cursive; font-size:24px; color:#0a0a12; background:var(--lime); border:none; border-radius:12px; padding:12px 34px; cursor:pointer; margin-top:24px; box-shadow:0 5px 0 #5c8a0e; }
+  #heads button:active { transform:translateY(3px); box-shadow:0 2px 0 #5c8a0e; }
   article { padding:22px 0; border-top:1px solid #ffffff12; }
   article.active .vtag { color:var(--cyan); }
   .vtag { font-family:'Bangers', cursive; font-size:28px; color:var(--lime); letter-spacing:.03em; }
@@ -66,7 +72,6 @@
       Web Audio synth. This is the whole thing as a <b>playable changelog</b>: every version, the message that caused it,
       and what changed. Click <b>▶ preview</b> and it runs on the right — already started.</p>
     <p class="meta">on-device (MediaPipe + WebGPU) · desktop Chrome/Edge + webcam</p>
-    <div class="notice">● <b>Heads-up:</b> every version records your session (camera + audio) to a <b>public gallery</b>. A consent popup asks first — <b>skip</b> for no recording — and a corner <b>toggle</b> flips it on/off anytime. Remove yours from the 🖼 gallery whenever.</div>
     <div id="posts"></div>
     <p class="meta" style="margin-top:34px">AIR family · <a href="https://airslice.dorkalev.com" style="color:var(--cyan)" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" style="color:var(--cyan)" target="_blank" rel="noopener">Dor Kalev</a> · hands by Google MediaPipe</p>
   </div>
@@ -80,7 +85,20 @@
   </div>
 </div>
 
+<div id="heads" class="gone">
+  <div class="hcard">
+    <h2>Heads up 👋</h2>
+    <p>Playing a version here <b>records your session</b> — your camera + audio — to a <b>public gallery</b> so others can see it.
+      Each version asks first (you can <b>skip</b>), a corner button toggles recording on/off, and you can <b>remove yours any time</b> from the 🖼 gallery.</p>
+    <button id="headsOk">Got it ▸</button>
+  </div>
+</div>
+
 <script>
+const heads = document.getElementById('heads');
+document.getElementById('headsOk').onclick = () => { heads.classList.add('gone'); try { localStorage.setItem('air-versions-heads', '1'); } catch (e) {} };
+if (!localStorage.getItem('air-versions-heads')) heads.classList.remove('gone');
+
 const RUN = (tag) => `./versions/${tag}.html`;   // baked locally, same origin
 const V = [
   ['v0', 'the air instrument', "build me a virtual piano game with the litert.js library", "First swing at an “air instrument”: a theremin. Raise a hand — vertical position sets the pitch (snapped to a scale so it can’t sound wrong), a pinch swells the volume, sideways pans. Two hands, two voices. Fun, but vague to actually play."],
