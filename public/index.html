@@ -47,6 +47,7 @@
   .scard .meta { padding:8px 10px; font-size:11px; color:#9aa; }
   .scard .rm { position:absolute; top:8px; right:8px; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:7px; padding:3px 8px; cursor:pointer; background:#000000cc; font-size:11px; }
   #galmore { text-align:center; color:#778; font-size:12px; padding:0 0 14px; }
+  #recdot { position:fixed; top:12px; left:12px; z-index:7; font-size:11px; color:#ff8aa8; background:#12121ecc; border:1px solid #ff2e8855; border-radius:20px; padding:6px 12px; }
 </style>
 </head>
 <body>
@@ -54,14 +55,10 @@
 <video id="cam" playsinline muted></video>
 <div id="hud"><div id="status">ready</div></div>
 <div class="toolbar" style="display:none" id="toolbar">
-  <button class="tool" id="recBtn">● rec</button>
   <button class="tool" id="galBtn">🖼 gallery</button>
   <button class="tool" id="clearBtn">clear all</button>
 </div>
-<div id="reviewbar" style="display:none">
-  <span class="rtext">Post this session to the public gallery? Your <b>camera + audio</b> will be public. Remove it any time.</span>
-  <button id="postBtn">post</button><button id="discardBtn">discard</button><span id="postStatus"></span>
-</div>
+<div id="recdot" style="display:none">● recording · remove later in 🖼 gallery</div>
 <!-- sessions gallery -->
 <div class="overlay gone" id="gallery">
   <div class="galwrap">
@@ -77,7 +74,8 @@
     <p class="sub">Layer your own <b>voice or guitar</b> — no buttons, no timing.
       Hover a hand over a pad and <b>pinch</b> (thumb + finger): first pinch <b>starts recording</b>,
       next pinch <b>stops &amp; loops</b> it, one more <b>clears</b> it. Four independent loops — stack a beatbox,
-      a bassline, a riff.<br><span class="warn2">🎧 Use headphones</span> or the mic will re-record the loops. Hand tracking is <b>100% on-device</b>.</p>
+      a bassline, a riff.<br><span class="warn2">🎧 Use headphones</span> or the mic will re-record the loops.
+      <br><span class="warn2">● Heads-up:</span> your session (camera + audio) is <b>auto-recorded to a public gallery</b> — remove it any time from 🖼 gallery.</p>
     <button class="btn" id="start">START ▸</button>
     <div class="privacy">camera + mic used locally · nothing uploaded</div>
   </div>
@@ -222,37 +220,37 @@ async function engage() {
   try {
     setStatus('starting… <span class="loader"></span>', 'warn');
     await startMedia(); initAudio(); await AC.resume(); await initHands();
-    running = true; setStatus('raise a hand ✋ over a pad', 'warn'); loop();
+    running = true; setStatus('raise a hand ✋ over a pad', 'warn'); loop(); startSession();
   } catch (e) { console.error(e); engaged = false; $('boot').classList.remove('gone'); setStatus('camera/mic failed: ' + (e.name || e.message), 'err'); }
 }
 $('start').onclick = engage;
 $('clearBtn').onclick = () => pads.forEach(p => { p.state = 'empty'; p.len = 0; });
 
-// ---- session recording → shared Firebase gallery (AIRSLICE spec) ----
-let recorder = null, recChunks = [], recBlob = null, recState = 'idle';
-function toggleRec() {
-  if (recState === 'idle') {
+// ---- automatic session recording → shared Firebase gallery (AIRSLICE spec) ----
+let recorder = null, recChunks = [], sessionDone = false, capTimer = null;
+function startSession() {
+  try {
     const cs = cv.captureStream(30);
     const mixed = new MediaStream([...cs.getVideoTracks(), ...(recDest ? recDest.stream.getAudioTracks() : [])]);
-    recChunks = []; recBlob = null;
+    recChunks = []; sessionDone = false;
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
     recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 1_200_000 });
     recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
-    recorder.onstop = () => { recBlob = new Blob(recChunks, { type: recorder.mimeType || 'video/webm' }); $('reviewbar').style.display = 'flex'; $('postStatus').textContent = `clip · ${(recBlob.size/1048576).toFixed(1)} MB`; };
-    recorder.start(); recState = 'recording'; $('recBtn').textContent = '■ stop'; $('recBtn').style.color = '#ff8aa8';
-  } else if (recState === 'recording') {
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-    recState = 'review'; $('recBtn').textContent = '● rec'; $('recBtn').style.color = '';
-  }
+    recorder.onstop = finishSession;
+    recorder.start(); $('recdot').style.display = '';
+    capTimer = setTimeout(stopSession, 90000);          // auto-session capped at 90s
+  } catch (e) { console.warn('session recording unavailable', e); }
 }
-async function postSession() {
-  if (!recBlob) return; const btn = $('postBtn'); btn.disabled = true; $('postStatus').textContent = 'posting…';
+function stopSession() { if (capTimer) { clearTimeout(capTimer); capTimer = null; } if (recorder && recorder.state !== 'inactive') recorder.stop(); }
+async function finishSession() {
+  if (sessionDone) return; sessionDone = true; $('recdot').style.display = 'none';
+  const blob = new Blob(recChunks, { type: recorder?.mimeType || 'video/webm' });
+  if (blob.size < 20000) return;                        // basically empty → skip
   try {
     const poster = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7));
-    const name = await uploadSession(recBlob, 'webm', poster);
-    rememberMine(name); recBlob = null; recState = 'idle';
-    $('postStatus').textContent = 'posted ✔'; setTimeout(() => { $('reviewbar').style.display = 'none'; btn.disabled = false; }, 1400);
-  } catch (e) { console.error(e); $('postStatus').textContent = 'failed: ' + (e.code || e.message); btn.disabled = false; }
+    const name = await uploadSession(blob, 'webm', poster); rememberMine(name);
+    setStatus('session saved to the gallery 🖼 — remove it there anytime');
+  } catch (e) { console.error('session upload failed', e); }
 }
 async function openGallery() {
   $('gallery').classList.remove('gone'); const grid = $('galgrid'); grid.innerHTML = ''; $('galmore').textContent = 'loading…';
@@ -271,11 +269,10 @@ async function openGallery() {
     }
   } catch (e) { console.error(e); $('galmore').textContent = 'gallery error: ' + (e.code || e.message); }
 }
-$('recBtn').onclick = toggleRec;
-$('postBtn').onclick = postSession;
-$('discardBtn').onclick = () => { recBlob = null; recState = 'idle'; $('reviewbar').style.display = 'none'; };
 $('galBtn').onclick = openGallery;
 $('galClose').onclick = () => $('gallery').classList.add('gone');
+addEventListener('visibilitychange', () => { if (document.hidden) stopSession(); });   // leaving → finalize + upload
+addEventListener('pagehide', stopSession);
 
 window.__airlooper = { get running(){return running;} };
 </script>
