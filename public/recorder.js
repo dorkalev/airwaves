@@ -57,6 +57,7 @@ style.textContent = `
   #airGallery .gm { text-align:center; color:#778; font-size:12px; padding:0 0 14px; }
   #airToast { position:fixed; left:12px; bottom:56px; z-index:10001; font-family:'Fragment Mono',monospace; font-size:12px; color:#0a0a12; background:#b6ff2e; border-radius:20px; padding:8px 14px; box-shadow:0 6px 18px #000a; opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; pointer-events:none; }
   #airToast.show { opacity:1; transform:none; }
+  #airToast.err { background:#ff2e88; color:#fff; }
   #airToast .c { display:inline-block; margin-left:6px; opacity:.7; }
 `;
 document.head.appendChild(style);
@@ -68,10 +69,10 @@ document.body.appendChild(bar);
 const $t = document.getElementById('airToggle');
 
 let toastEl = null, toastT = null, saveCount = 0;
-function toast(msg) {
+function toast(msg, err) {
   if (!toastEl) { toastEl = document.createElement('div'); toastEl.id = 'airToast'; document.body.appendChild(toastEl); }
-  toastEl.innerHTML = msg; toastEl.classList.add('show');
-  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 2400);
+  toastEl.innerHTML = msg; toastEl.classList.toggle('err', !!err); toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), err ? 4000 : 2400);
 }
 
 function refresh() {
@@ -88,8 +89,11 @@ function setConsent(v) { consent = v; try { localStorage.setItem(LS, v); } catch
 // ---- capture ----
 function arm() {
   if (armed || consent !== 'on') return; armed = true;
-  const go = () => { window.removeEventListener('pointerdown', go, true); setTimeout(startCapture, 900); };
-  window.addEventListener('pointerdown', go, true);   // start once the app starts (first gesture)
+  // start once the app starts — a real gesture OR a programmatic start (the
+  // versions preview auto-clicks START, which fires 'click' but not 'pointerdown')
+  const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('click', go, true); setTimeout(startCapture, 900); };
+  window.addEventListener('pointerdown', go, true);
+  window.addEventListener('click', go, true);
 }
 function startCapture() {
   if (recorder || consent !== 'on') return;
@@ -111,7 +115,7 @@ function startCapture() {
     recorder.onstop = finish;
     recorder.start(1000);                              // 1s timeslice → chunks accumulate
     refresh();
-    flushT = setInterval(flush, 15000);                // continuously save every 15s (no reliance on a clean close)
+    flushT = setInterval(flush, 5000);                 // continuously save every 5s (no reliance on a clean close)
     capT = setTimeout(() => stopCapture(false), 120000);  // bound total session length
   } catch (e) { console.warn('capture failed', e); recorder = null; }
 }
@@ -122,7 +126,7 @@ async function flush() {
   try {
     if (!sessionPath) sessionPath = sessionName('webm');
     const blob = new Blob(chunks, { type: 'video/webm' });
-    if (blob.size < 20000) return;
+    if (blob.size < 8000) return;
     let poster = null;
     if (!posterDone) { const cv = document.querySelector('canvas'); poster = cv ? await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7)) : null; }
     const first = !posterDone;
@@ -131,7 +135,8 @@ async function flush() {
     saveCount++;
     toast(first ? '☁ Saved to the gallery — remove it anytime'
                 : `☁ Session updated<span class="c">· save #${saveCount}</span>`);
-  } catch (e) { console.warn('flush failed', e); } finally { flushing = false; }
+  } catch (e) { console.warn('flush failed', e); toast('⚠ Couldn\'t save — check your connection', true); }
+  finally { flushing = false; }
 }
 function stopCapture(discard) {
   if (flushT) { clearInterval(flushT); flushT = null; }
