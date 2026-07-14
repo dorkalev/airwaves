@@ -4,7 +4,11 @@
 //  - a 🖼 gallery button (remove-your-own)
 // Audio is captured generically by tapping every AudioContext's connection to
 // its destination — so it works on any version without editing the app.
-import { sessionName, uploadTo, deleteByName, listSessions, getUrl, getPosterUrl, deleteSession, rememberMine, forgetMine, isMine } from './firebase.js?v=2';
+import { sessionName, uploadTo, deleteByName, listSessions, getUrl, getPosterUrl, deleteSession, rememberMine, forgetMine, isMine, RECORDING_ENABLED } from './firebase.js?v=2';
+
+// No Firebase project configured (e.g. a fork with a blank config.js) → this
+// whole layer stays out of the way: no capture, no UI, no network, no clutter.
+if (RECORDING_ENABLED) {
 
 // ---- tap all app audio: mirror any -> ctx.destination into a capture node ----
 (function () {
@@ -286,3 +290,5 @@ refresh();
 if (integrateStart()) { /* START carries the choice → capture begins on that click; no separate popup */ }
 else if (consent === null) showConsent();
 else if (consent === 'on') startCapture();
+
+} // end if (RECORDING_ENABLED)

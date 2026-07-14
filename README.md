@@ -21,5 +21,11 @@ minor-pentatonic / lydian / japanese) and **tone** (warm / pure / reed / glass).
   volume + filter**, **x → pan**, with portamento so it glides musically.
 - Two `OscillatorNode` voices → lowpass → stereo pan → a feedback-delay space.
 
+## Recording (optional)
+Sessions can be captured to a small public gallery (Firebase Storage — no
+database). It's **off unless configured**: fill `public/config.js` with your own
+Firebase web config to turn it on, or leave it blank to run just the instrument.
+`admin.html` is a moderation page gated to `ADMIN_EMAIL`.
+
 ## License
 [MIT](LICENSE). Hand tracking via Google MediaPipe Tasks.

@@ -1,10 +1,14 @@
-// AIRWAVES session recording — same architecture as the AIRSLICE wall, pointed
-// at the shared AIRSLICE Firebase project and namespaced under demos/<DEMO>/.
-// No database: sessions are named with an inverted-timestamp prefix so a
-// lexicographic list() returns them newest-first. Ownership is tracked in
-// localStorage (the real owner uid lives in file metadata for the rules).
+// Optional session recording, backed by Firebase Storage-as-a-database:
+// sessions are named with an inverted-timestamp prefix so a lexicographic
+// list() returns them newest-first; ownership lives in file metadata + local
+// storage. Fork-friendly: with no real project in config.js this whole layer
+// switches off (see RECORDING_ENABLED) and you get just the instrument.
 export { FIREBASE_CONFIG, APPCHECK_SITE_KEY, ADMIN_EMAIL, DEMO } from './config.js';
 import { FIREBASE_CONFIG, APPCHECK_SITE_KEY, DEMO } from './config.js';
+
+// on unless config.js still holds placeholders — so a fork records nothing until
+// its own Firebase project is filled in
+export const RECORDING_ENABLED = !!(FIREBASE_CONFIG && FIREBASE_CONFIG.projectId) && !/^(YOUR_|your_project)/i.test(FIREBASE_CONFIG.projectId);
 
 const CDN = 'https://www.gstatic.com/firebasejs/10.12.2';
 const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
