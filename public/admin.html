@@ -26,6 +26,7 @@
   .run .rv { position:relative; }
   .run video { filter:brightness(.42); transition:filter .25s ease; }
   .run video.live { filter:none; }
+  .run .vb { position:absolute; top:8px; left:8px; z-index:1; font-family:'Fragment Mono', monospace; font-size:10px; font-weight:bold; color:#0a0a12; background:var(--lime); border-radius:6px; padding:2px 6px; }
   .run .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   .run .mx:hover { border-color:var(--cyan); color:#fff; }
   #pvLight { position:fixed; inset:0; z-index:200; display:none; place-items:center; background:#0a0a12ee; backdrop-filter:blur(8px); padding:24px; }
@@ -109,7 +110,7 @@ async function loadAll() {
     $('more').textContent = all.length ? '' : 'no sessions yet';
     for (const s of all) {
       const el = document.createElement('div'); el.className = 'run';
-      el.innerHTML = `<div class="rv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="meta">${new Date(s.ts).toLocaleString()}</div><button class="kill">🗑 delete</button>`;
+      el.innerHTML = `<div class="rv"><video playsinline loop muted preload="none"></video><span class="vb">${s.version || '?'}</span><button class="mx" title="enlarge">⛶</button></div><div class="meta">${new Date(s.ts).toLocaleString()} · ${s.version || 'unknown'}</div><button class="kill">🗑 delete</button>`;
       const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
       v.addEventListener('play', () => { v.classList.add('live'); board.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
       v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                   // dim back to the start

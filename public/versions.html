@@ -68,6 +68,7 @@
   .gcard .gv { position:relative; aspect-ratio:4/3; }
   .gcard video { width:100%; height:100%; object-fit:cover; background:#000; display:block; filter:brightness(.42); transition:filter .25s ease; }
   .gcard video.live { filter:none; }
+  .gcard .vb { position:absolute; top:6px; left:6px; z-index:1; font-family:'Fragment Mono', monospace; font-size:10px; font-weight:bold; color:#0a0a12; background:var(--lime); border-radius:6px; padding:1px 6px; }
   .gcard .mx { position:absolute; bottom:6px; right:6px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   .gcard .mx:hover { border-color:var(--cyan); color:#fff; }
   /* enlarge lightbox */
@@ -262,7 +263,7 @@ function confirmDelete(onYes) {
 function makeCard(s, container) {
   const scope = container || grid;
   const el = document.createElement('div'); el.className = 'gcard fresh';
-  el.innerHTML = `<div class="gv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
+  el.innerHTML = `<div class="gv"><video playsinline loop muted preload="none"></video><span class="vb">${s.version || '?'}</span><button class="mx" title="enlarge">⛶</button></div><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
   const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
   v.addEventListener('play', () => { v.classList.add('live'); scope.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
   v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                   // dim back to the start

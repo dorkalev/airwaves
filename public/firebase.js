@@ -38,9 +38,15 @@ const SESS = `demos/${DEMO}/sessions`, POST = `demos/${DEMO}/posters`;
 const leafOf = (name) => name.split('/').pop();
 const baseOf = (name) => leafOf(name).replace(/\.[^.]+$/, '');
 
-// demos/<DEMO>/sessions/<invTs13>_<ts13>.<ext>  → list() returns newest-first
-export function sessionName(ext) { const ts = Date.now(); return `${SESS}/${String(MAXT - ts).padStart(13,'0')}_${ts}.${ext}`; }
-export function tsOf(name) { const m = leafOf(name).match(/^\d{13}_(\d{13})\./); return m ? +m[1] : 0; }
+// demos/<DEMO>/sessions/<invTs13>_<ts13>__<version>.<ext>  → list() returns newest-first.
+// the version segment (e.g. v14 / live) records which build the clip is from.
+export function sessionName(ext, version) {
+  const ts = Date.now();
+  const v = String(version || 'live').replace(/[^a-z0-9]/gi, '').slice(0, 12) || 'live';
+  return `${SESS}/${String(MAXT - ts).padStart(13, '0')}_${ts}__${v}.${ext}`;
+}
+export function tsOf(name) { const m = leafOf(name).match(/^\d{13}_(\d{13})/); return m ? +m[1] : 0; }
+export function versionOf(name) { const m = leafOf(name).match(/^\d{13}_\d{13}__([a-z0-9]+)\./i); return m ? m[1] : null; }
 
 export async function uploadSession(blob, ext, posterBlob) {
   const { st, storage, uid } = await getFirebase();
@@ -49,7 +55,7 @@ export async function uploadSession(blob, ext, posterBlob) {
   await st.uploadBytes(st.ref(storage, name), blob, {
     contentType: blob.type || 'video/webm',
     cacheControl: 'public, max-age=31536000, immutable',
-    customMetadata: { owner: uid, demo: DEMO },
+    customMetadata: { owner: uid, demo: DEMO, version: versionOf(name) || '' },
   });
   if (posterBlob) {
     try { await st.uploadBytes(st.ref(storage, `${POST}/${baseOf(name)}.jpg`), posterBlob, { contentType: 'image/jpeg', customMetadata: { owner: uid, demo: DEMO } }); } catch {}
@@ -63,7 +69,7 @@ export async function uploadTo(name, blob, posterBlob) {
   if (!uid) throw new Error('sign-in unavailable');
   await st.uploadBytes(st.ref(storage, name), blob, {
     contentType: blob.type || 'video/webm', cacheControl: 'no-cache',
-    customMetadata: { owner: uid, demo: DEMO },
+    customMetadata: { owner: uid, demo: DEMO, version: versionOf(name) || '' },
   });
   if (posterBlob) {
     try { await st.uploadBytes(st.ref(storage, `${POST}/${baseOf(name)}.jpg`), posterBlob, { contentType: 'image/jpeg', customMetadata: { owner: uid, demo: DEMO } }); } catch {}
@@ -73,7 +79,7 @@ export async function uploadTo(name, blob, posterBlob) {
 export async function listSessions(pageToken = null, pageSize = 24) {
   const { st, storage } = await getFirebase();
   const res = await st.list(st.ref(storage, SESS), { maxResults: pageSize, pageToken });
-  return { items: res.items.map(i => ({ item: i, name: i.name, path: i.fullPath, ts: tsOf(i.name) })), next: res.nextPageToken || null };
+  return { items: res.items.map(i => ({ item: i, name: i.name, path: i.fullPath, ts: tsOf(i.name), version: versionOf(i.name) })), next: res.nextPageToken || null };
 }
 export async function getUrl(item) { const { st } = await getFirebase(); return st.getDownloadURL(item); }
 export async function getPosterUrl(name) {

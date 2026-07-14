@@ -27,6 +27,8 @@ import { sessionName, uploadTo, deleteByName, listSessions, getUrl, getPosterUrl
 const audioTracks = () => { const t = []; (window.__airCtxs || []).forEach(c => { try { c.__cap.stream.getAudioTracks().forEach(x => t.push(x)); } catch (e) {} }); return t; };
 
 const LS = 'air-rec-consent';
+// which build this clip is from: /versions/v14.html → 'v14'; the live app → 'live'
+const REC_VER = (location.pathname.match(/(v\d+)\.html?$/i) || [])[1] || 'live';
 let consent = localStorage.getItem(LS);   // 'on' | 'off' | null
 let recorder = null, chunks = [], done = false, capT = null;
 let sessionPath = null, posterDone = false, flushT = null, flushing = false, stopCopy = null;
@@ -71,6 +73,7 @@ style.textContent = `
   #airGallery .sc video.live { filter:none; }
   #airGallery .sc .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   #airGallery .sc .mx:hover { border-color:#29f4ff; color:#fff; }
+  #airGallery .sc .vb { position:absolute; top:8px; left:8px; font-size:10px; font-weight:bold; color:#0a0a12; background:#b6ff2e; border-radius:6px; padding:2px 6px; font-family:'Fragment Mono',monospace; }
   #airLight { position:fixed; inset:0; z-index:10002; display:none; place-items:center; background:#0a0a12ee; backdrop-filter:blur(8px); padding:24px; }
   #airLight.show { display:grid; }
   #airLight .lb { position:relative; }
@@ -149,7 +152,7 @@ async function flush() {
   if (consent !== 'on' || flushing || !chunks.length) return;
   flushing = true;
   try {
-    if (!sessionPath) sessionPath = sessionName('webm');
+    if (!sessionPath) sessionPath = sessionName('webm', REC_VER);
     const blob = new Blob(chunks, { type: 'video/webm' });
     if (blob.size < 8000) return;
     let poster = null;
@@ -208,7 +211,7 @@ async function openGallery() {
     more.textContent = items.length ? '' : 'no sessions yet';
     for (const s of items) {
       const el = document.createElement('div'); el.className = 'sc';
-      el.innerHTML = `<div class="sv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="m">${new Date(s.ts).toLocaleString()}</div>`;
+      el.innerHTML = `<div class="sv"><video playsinline loop muted preload="none"></video><span class="vb">${s.version || '?'}</span><button class="mx" title="enlarge">⛶</button></div><div class="m">${new Date(s.ts).toLocaleString()}</div>`;
       const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
       v.addEventListener('play', () => { v.classList.add('live'); grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
       v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                  // dim back to the start
