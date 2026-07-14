@@ -40,6 +40,10 @@ style.textContent = `
   #airStop { display:none; color:#0a0a12; background:#b6ff2e; border-color:#b6ff2e; font-weight:bold; }
   #airSkip { display:inline-block; margin:12px 0 0 14px; background:transparent; border:none; color:#8a94a5; font-size:13px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; font-family:'Fragment Mono',monospace; opacity:.7; vertical-align:middle; }
   #airSkip:hover { color:#cfe; opacity:1; }
+  #airCount { position:fixed; inset:0; z-index:9998; display:grid; place-items:center; pointer-events:none; }
+  #airCount .msg { font-family:'Bangers','Arial Black',sans-serif; font-size:clamp(40px,9vw,76px); color:#fff; text-align:center; letter-spacing:.03em; padding:0 24px; text-shadow:0 4px 0 #ff2e88, 0 0 30px #000c; }
+  #airCount .msg.pop { animation:airpop .38s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes airpop { from { transform:scale(.55); opacity:0; } to { transform:scale(1); opacity:1; } }
   #airToggle .dot { display:none; } #airToggle.rec .dot { display:inline; animation:airblink 1s steps(1) infinite; }
   @keyframes airblink { 50% { opacity:.25; } }
   #airConsent, #airGallery { position:fixed; inset:0; z-index:10000; display:grid; place-items:center; background:#0a0a12dd; backdrop-filter:blur(6px); font-family:'Fragment Mono',monospace; color:#e8ebf0; padding:20px; }
@@ -230,7 +234,29 @@ function showConsent() {
 
 // ---- fold the recording choice into the game's START button ----
 // primary "Start + record" opts in; a quiet "skip recording" beside it opts out.
+// The game starts immediately; a ready-countdown plays, then (if recording)
+// capture begins — so it never records the fumbling before you're set.
 let skipping = false;
+function countdown(record) {
+  const o = document.createElement('div'); o.id = 'airCount';
+  o.innerHTML = `<div class="msg"></div>`; document.body.appendChild(o);
+  const msg = o.querySelector('.msg');
+  const steps = record ? ['Use your hands to play!', '3', '2', '1', 'record starts!'] : ['starting!'];
+  const holds = record ? [1200, 800, 800, 800, 900] : [1100];
+  let i = 0;
+  (function tick() {
+    if (i >= steps.length) { o.remove(); if (record) startCapture(); return; }
+    msg.textContent = steps[i];
+    msg.classList.remove('pop'); void msg.offsetWidth; msg.classList.add('pop');
+    const h = holds[i]; i++; setTimeout(tick, h);
+  })();
+}
+function beginSequence(record) {
+  consent = record ? 'on' : 'off';
+  try { localStorage.setItem(LS, consent); } catch (e) {}
+  refresh();
+  countdown(record);   // recording (if any) starts only when the countdown ends
+}
 function integrateStart() {
   const btn = document.getElementById('start');
   if (!btn) return false;
@@ -240,9 +266,9 @@ function integrateStart() {
     const skip = document.createElement('button');
     skip.id = 'airSkip'; skip.type = 'button'; skip.textContent = 'skip recording';
     btn.insertAdjacentElement('afterend', skip);
-    // capture phase → decide recording BEFORE the app's own start handler runs
-    btn.addEventListener('click', () => { if (!skipping) setConsent('on'); }, true);
-    skip.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); skipping = true; setConsent('off'); btn.click(); skipping = false; }, false);
+    // capture phase → run the ready-sequence BEFORE the app's own start handler
+    btn.addEventListener('click', () => { if (!btn.__started) { btn.__started = true; beginSequence(!skipping); } }, true);
+    skip.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); skipping = true; btn.click(); }, false);
   }
   return true;
 }
