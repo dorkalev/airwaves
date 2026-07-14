@@ -55,6 +55,9 @@ style.textContent = `
   #airGallery .sc .m { padding:7px 10px; font-size:11px; color:#9aa; }
   #airGallery .sc .rm { position:absolute; top:8px; right:8px; font-size:11px; color:#ff8aa8; background:#000000cc; border:1px solid #ff2e8855; border-radius:7px; padding:3px 8px; cursor:pointer; }
   #airGallery .gm { text-align:center; color:#778; font-size:12px; padding:0 0 14px; }
+  #airToast { position:fixed; left:12px; bottom:56px; z-index:10001; font-family:'Fragment Mono',monospace; font-size:12px; color:#0a0a12; background:#b6ff2e; border-radius:20px; padding:8px 14px; box-shadow:0 6px 18px #000a; opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; pointer-events:none; }
+  #airToast.show { opacity:1; transform:none; }
+  #airToast .c { display:inline-block; margin-left:6px; opacity:.7; }
 `;
 document.head.appendChild(style);
 
@@ -63,6 +66,13 @@ bar.id = 'airbar';
 bar.innerHTML = `<button id="airToggle"><span class="dot">● </span><span class="lbl"></span></button><button id="airGal" title="gallery">🖼</button>`;
 document.body.appendChild(bar);
 const $t = document.getElementById('airToggle');
+
+let toastEl = null, toastT = null, saveCount = 0;
+function toast(msg) {
+  if (!toastEl) { toastEl = document.createElement('div'); toastEl.id = 'airToast'; document.body.appendChild(toastEl); }
+  toastEl.innerHTML = msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 2400);
+}
 
 function refresh() {
   $t.className = consent === 'on' ? 'on' : 'off';
@@ -115,8 +125,12 @@ async function flush() {
     if (blob.size < 20000) return;
     let poster = null;
     if (!posterDone) { const cv = document.querySelector('canvas'); poster = cv ? await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7)) : null; }
+    const first = !posterDone;
     await uploadTo(sessionPath, blob, poster);
-    if (!posterDone) { posterDone = true; rememberMine(sessionPath); }
+    if (first) { posterDone = true; rememberMine(sessionPath); }
+    saveCount++;
+    toast(first ? '☁ Saved to the gallery — remove it anytime'
+                : `☁ Session updated<span class="c">· save #${saveCount}</span>`);
   } catch (e) { console.warn('flush failed', e); } finally { flushing = false; }
 }
 function stopCapture(discard) {

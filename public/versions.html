@@ -61,6 +61,11 @@
   .gcard .gm { padding:5px 8px; font-size:10px; color:#889; }
   .gcard .rm { position:absolute; top:6px; right:6px; font-size:10px; color:#ff8aa8; background:#000000cc; border:1px solid #ff2e8855; border-radius:6px; padding:2px 6px; cursor:pointer; }
   .gempty { color:#667; font-size:12px; padding:14px; grid-column:1/-1; }
+  .gcard.fresh { animation:gflash 1.3s ease; }
+  @keyframes gflash { 0% { box-shadow:0 0 0 2px var(--lime); transform:translateY(-5px); opacity:.35; } 100% { box-shadow:0 0 0 0 #0000; transform:none; opacity:1; } }
+  .rgbar .live b { color:var(--lime); }
+  .rgbar .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--lime); margin-right:6px; vertical-align:1px; animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.2; } }
   #pvFrame { border:0; background:#000; }   /* sized by JS to a centered 4:3 box (matches the camera) */
   /* cover the frame while a version boots so its landing/START never flashes */
   #cover { position:absolute; inset:0; z-index:2; display:grid; place-items:center; text-align:center; color:#667;
@@ -102,7 +107,7 @@
       <div id="cover"><div><div class="big">▶</div><span id="coverText">click “play” on any version — it starts here automatically</span></div></div>
     </div>
     <div class="rgal">
-      <div class="rgbar"><span>all sessions — every former play</span><button id="rgalRefresh">↻ refresh</button></div>
+      <div class="rgbar"><span class="live"><span class="dot"></span>all sessions — <b>updating live</b></span><button id="rgalRefresh">↻ refresh</button></div>
       <div class="rggrid" id="rgalGrid"></div>
     </div>
   </div>
@@ -210,26 +215,35 @@ V.forEach(([tag, title, prompt, explain]) => {
 // "all sessions" gallery under the app — reads the shared Firebase (demos/airwaves/)
 import { listSessions, getUrl, getPosterUrl, deleteSession, isMine, forgetMine } from './firebase.js?v=2';
 const grid = document.getElementById('rgalGrid');
-async function loadGallery() {
-  grid.innerHTML = '<div class="gempty">loading…</div>';
-  try {
-    const { items } = await listSessions(null, 60);
-    grid.innerHTML = '';
-    if (!items.length) { grid.innerHTML = '<div class="gempty">no sessions yet — play a version to add one</div>'; return; }
-    for (const s of items) {
-      const el = document.createElement('div'); el.className = 'gcard';
-      el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
-      const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } };
-      if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'remove yours';
-        rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); } catch (e) { rm.textContent = '!'; } }; el.appendChild(rm); }
-      grid.appendChild(el);
-    }
-  } catch (e) { console.error(e); grid.innerHTML = '<div class="gempty">gallery unavailable — on localhost this needs the App Check debug token registered</div>'; }
+const cards = new Map();   // session name -> card element (so we only add what's new)
+
+function makeCard(s) {
+  const el = document.createElement('div'); el.className = 'gcard fresh';
+  el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
+  const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
+  v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } };
+  if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'remove yours';
+    rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); cards.delete(s.name); } catch (e) { rm.textContent = '!'; } }; el.appendChild(rm); }
+  setTimeout(() => el.classList.remove('fresh'), 1300);
+  return el;
 }
-document.getElementById('rgalRefresh').onclick = loadGallery;
-window.reloadGallery = loadGallery;
-loadGallery();
+// full=true rebuilds from scratch (initial load / manual refresh); otherwise
+// just prepend sessions we haven't shown yet — the "watch it fill up" path.
+async function loadGallery(full) {
+  if (full) grid.innerHTML = '<div class="gempty">loading…</div>';
+  try {
+    const { items } = await listSessions(null, 60);   // newest-first (inverted-ts naming)
+    if (full) { grid.innerHTML = ''; cards.clear(); }
+    grid.querySelector('.gempty')?.remove();
+    if (!items.length && !cards.size) { grid.innerHTML = '<div class="gempty">no sessions yet — play a version to add one</div>'; return; }
+    const incoming = items.filter(s => !cards.has(s.name));
+    for (const s of incoming.reverse()) { const el = makeCard(s); cards.set(s.name, el); grid.prepend(el); }  // reverse → keeps newest at top
+  } catch (e) { if (!cards.size) { console.error(e); grid.innerHTML = '<div class="gempty">gallery unavailable — on localhost this needs the App Check debug token registered</div>'; } }
+}
+document.getElementById('rgalRefresh').onclick = () => loadGallery(true);
+window.reloadGallery = () => loadGallery(false);
+loadGallery(true);
+setInterval(() => { if (!document.hidden) loadGallery(false); }, 4000);   // live: poll the newest page, add what's new
 </script>
 </body>
 </html>
