@@ -162,7 +162,8 @@ async function openGallery() {
       const el = document.createElement('div'); el.className = 'sc';
       el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="m">${new Date(s.ts).toLocaleString()}</div>`;
       const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } };
+      v.addEventListener('play', () => grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }));   // only one plays at a time
+      v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } };
       if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑 remove'; rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); } catch (e) { rm.textContent = 'failed'; } }; el.appendChild(rm); }
       grid.appendChild(el);
     }

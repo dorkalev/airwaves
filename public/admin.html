@@ -73,7 +73,8 @@ async function loadAll() {
       const el = document.createElement('div'); el.className = 'run';
       el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="meta">${new Date(s.ts).toLocaleString()}</div><button class="kill">🗑 delete</button>`;
       const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.addEventListener('click', async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } });
+      v.addEventListener('play', () => board.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }));   // only one plays at a time
+      v.addEventListener('click', async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } });
       const btn = el.querySelector('.kill'); let armed = 0;
       btn.onclick = async () => {
         if (Date.now() - armed > 3000) { armed = Date.now(); btn.textContent = 'SURE?'; setTimeout(() => btn.isConnected && (btn.textContent = '🗑 delete'), 3000); return; }
