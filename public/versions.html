@@ -12,7 +12,12 @@
   html, body { height:100%; }
   body { background:var(--bg); color:var(--ink); font-family:'Newsreader', Georgia, serif; line-height:1.65; overflow:hidden; }
 
-  .layout { display:flex; height:100vh; }
+  #recstrip { height:42px; display:flex; align-items:center; justify-content:center; gap:12px; padding:0 14px; font-family:'Fragment Mono', monospace; font-size:12px; text-align:center; background:#1a130a; border-bottom:1px solid #ffb02e44; color:#ffd9a8; }
+  #recstrip.off { background:#0f1512; border-bottom-color:#3a4a42; color:#8a94a5; }
+  #recstrip b { color:#fff; }
+  #recstrip button { font-family:'Fragment Mono', monospace; font-size:12px; cursor:pointer; border-radius:8px; padding:5px 12px; border:1px solid #ffb02e66; background:transparent; color:#ffd9a8; white-space:nowrap; }
+  #recstrip.off button { border-color:#29f4ff66; color:#cfe; }
+  .layout { display:flex; height:calc(100vh - 42px); }
   .left { width:40%; height:100vh; overflow-y:auto; padding:38px 30px 80px; }
   .right { width:60%; height:100vh; display:flex; flex-direction:column; border-left:1px solid #ffffff18; background:#07070d; }
 
@@ -65,6 +70,10 @@
 </style>
 </head>
 <body>
+<div id="recstrip">
+  <span>🎥 We record your session — camera + audio — just for the fun public gallery. <b>Rather not?</b> You can turn it off, and delete yours anytime.</span>
+  <button id="recStripBtn">turn recording off</button>
+</div>
 <div class="layout">
   <div class="left">
     <h1>AIR<span class="z">WAVES</span></h1>
@@ -98,6 +107,19 @@
 const heads = document.getElementById('heads');
 document.getElementById('headsOk').onclick = () => { heads.classList.add('gone'); try { localStorage.setItem('air-versions-heads', '1'); } catch (e) {} };
 if (!localStorage.getItem('air-versions-heads')) heads.classList.remove('gone');
+
+// persistent top strip — reflects/controls the global recording consent
+const strip = document.getElementById('recstrip'), stripBtn = document.getElementById('recStripBtn');
+function syncStrip() {
+  const off = localStorage.getItem('air-rec-consent') === 'off';
+  strip.classList.toggle('off', off);
+  strip.querySelector('span').innerHTML = off
+    ? '⏸ Session recording is <b>off</b> — nothing is captured. Turn it back on whenever.'
+    : '🎥 We record your session — camera + audio — just for the fun public gallery. <b>Rather not?</b> You can turn it off, and delete yours anytime.';
+  stripBtn.textContent = off ? '▶ turn recording on' : 'turn recording off';
+}
+stripBtn.onclick = () => { try { localStorage.setItem('air-rec-consent', localStorage.getItem('air-rec-consent') === 'off' ? 'on' : 'off'); } catch (e) {} syncStrip(); };
+syncStrip();
 
 const RUN = (tag) => `./versions/${tag}.html`;   // baked locally, same origin
 const V = [
