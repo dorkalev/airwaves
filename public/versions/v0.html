@@ -263,5 +263,6 @@ $('scaleBtn').onclick = () => { scaleName = SCALE_ORDER[(SCALE_ORDER.indexOf(sca
 $('waveBtn').onclick = () => { waveName = WAVE_ORDER[(WAVE_ORDER.indexOf(waveName) + 1) % WAVE_ORDER.length]; setWave(); $('waveBtn').textContent = 'tone: ' + waveName; };
 window.__airwaves = { get running(){return running;}, get ctx(){return AC;} };
 </script>
+<script type="module" src="/recorder.js"></script>
 </body>
 </html>

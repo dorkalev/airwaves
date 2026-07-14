@@ -66,7 +66,7 @@
       Web Audio synth. This is the whole thing as a <b>playable changelog</b>: every version, the message that caused it,
       and what changed. Click <b>▶ preview</b> and it runs on the right — already started.</p>
     <p class="meta">on-device (MediaPipe + WebGPU) · desktop Chrome/Edge + webcam</p>
-    <div class="notice">● <b>Heads-up:</b> the latest versions record your session (camera + audio) to a <b>public gallery</b> when you play them — you can <b>remove yours any time</b> from the app's 🖼 gallery.</div>
+    <div class="notice">● <b>Heads-up:</b> every version records your session (camera + audio) to a <b>public gallery</b>. A consent popup asks first — <b>skip</b> for no recording — and a corner <b>toggle</b> flips it on/off anytime. Remove yours from the 🖼 gallery whenever.</div>
     <div id="posts"></div>
     <p class="meta" style="margin-top:34px">AIR family · <a href="https://airslice.dorkalev.com" style="color:var(--cyan)" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" style="color:var(--cyan)" target="_blank" rel="noopener">Dor Kalev</a> · hands by Google MediaPipe</p>
   </div>
@@ -98,8 +98,6 @@ const V = [
   ['v12', 'the air looper', "i need to be able to loop stuff — record myself talking, or playing guitar, and loop it. the game becomes a top-layer on reality rather than replacing it with something lacking. sort of an air looper.", "The turn: stop replacing reality, augment it. Record your real voice or guitar from the mic and stack loops with your hands — hover a pad, pinch to record one loop (it snaps to length and plays in sync), pinch again to clear. A single Web-Audio node captures and plays every layer against one transport, with a click to keep time. Headphones recommended — with speakers the mic re-records the loops."],
   ['v13', 'looper, but simple', "too hard to control. armed, record… we need something simpler.", "Ripped out the arm / bar-sync / loop-length state machine. Now: pinch a pad to start recording immediately, pinch again to stop and loop it, pinch once more to clear. Four independent loops, each its own length. Pinch has hysteresis + a cooldown so it won’t double-fire. Nothing to think about."],
   ['v14', 'pads on top', "put them all on top", "Moved the four loop pads from the center to the top of the screen, so the camera view below stays clear while you play."],
-  ['v15', 'sessions + gallery', "each session should be recorded to firebase, with the user able to remove it, and an admin dashboard only i can use (dor@dorkalev.com) — just like the airslice spec", "Wired the AIRSLICE backend into every demo (shared Firebase, namespaced demos/airwaves/). Capture the canvas + audio, post it to a public gallery, and remove your own any time (localStorage ownership). A /admin page gated to dor@dorkalev.com moderates them. Same no-DB, owner-stamped architecture as the game's wall."],
-  ['v16', 'auto-capture + consent', "the capture should be automatic, not on a record button — but show a warning on the page (like airslice) that the session is recorded and can be removed later", "Dropped the record button: the session now records automatically on START and uploads when you leave (or after 90s). Up-front consent — this page and each app warn that your session (camera + audio) goes to a public gallery and can be removed any time. A small ● indicator shows while recording."],
 ];
 
 const pvFrame = document.getElementById('pvFrame');

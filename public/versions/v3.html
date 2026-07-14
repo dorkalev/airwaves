@@ -258,5 +258,6 @@ $('waveBtn').onclick = () => { waveName = WAVE_ORDER[(WAVE_ORDER.indexOf(waveNam
 $('octBtn').onclick = () => { octave = octave >= 1 ? -1 : octave + 1; $('octBtn').textContent = 'octave: ' + (octave > 0 ? '+' : '') + octave; };
 window.__airwaves = { get running(){return running;}, get ctx(){return AC;} };
 </script>
+<script type="module" src="/recorder.js"></script>
 </body>
 </html>
