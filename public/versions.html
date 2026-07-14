@@ -12,12 +12,7 @@
   html, body { height:100%; }
   body { background:var(--bg); color:var(--ink); font-family:'Newsreader', Georgia, serif; line-height:1.65; overflow:hidden; }
 
-  #recstrip { height:42px; display:flex; align-items:center; justify-content:center; gap:12px; padding:0 14px; font-family:'Fragment Mono', monospace; font-size:12px; text-align:center; background:#1a130a; border-bottom:1px solid #ffb02e44; color:#ffd9a8; }
-  #recstrip.off { background:#0f1512; border-bottom-color:#3a4a42; color:#8a94a5; }
-  #recstrip b { color:#fff; }
-  #recstrip button { font-family:'Fragment Mono', monospace; font-size:12px; cursor:pointer; border-radius:8px; padding:5px 12px; border:1px solid #ffb02e66; background:transparent; color:#ffd9a8; white-space:nowrap; }
-  #recstrip.off button { border-color:#29f4ff66; color:#cfe; }
-  .layout { display:flex; height:calc(100vh - 42px); }
+  .layout { display:flex; height:100vh; }
   .left { width:40%; height:100vh; overflow-y:auto; padding:38px 30px 80px; }
   .right { width:60%; height:100vh; display:flex; flex-direction:column; border-left:1px solid #ffffff18; background:#07070d; }
 
@@ -66,6 +61,26 @@
   .rgbar .live b { color:var(--lime); }
   .rgbar .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--lime); margin-right:6px; vertical-align:1px; animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity:.2; } }
+  /* clips are dark until they actually play (paused → back to dark) */
+  .gcard .gv { position:relative; }
+  .gcard video { filter:brightness(.42); transition:filter .25s ease; }
+  .gcard video.live { filter:none; }
+  .gcard .mx { position:absolute; bottom:6px; right:6px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
+  .gcard .mx:hover { border-color:var(--cyan); color:#fff; }
+  /* enlarge lightbox */
+  #pvLight { position:fixed; inset:0; z-index:200; display:none; place-items:center; background:#0a0a12ee; backdrop-filter:blur(8px); padding:24px; }
+  #pvLight.show { display:grid; }
+  #pvLight .lb { position:relative; }
+  #pvLight video { max-width:90vw; max-height:86vh; border-radius:12px; background:#000; box-shadow:0 20px 60px #000c; display:block; }
+  #pvLight .lx { position:absolute; top:-15px; right:-15px; width:36px; height:36px; border-radius:50%; border:none; background:var(--hot); color:#fff; font-size:16px; cursor:pointer; box-shadow:0 4px 14px #000a; }
+  /* delete confirmation */
+  #pvConfirm { position:fixed; inset:0; z-index:201; display:none; place-items:center; background:#0a0a12dd; backdrop-filter:blur(6px); padding:24px; }
+  #pvConfirm.show { display:grid; }
+  #pvConfirm .cf { background:#12121e; border:1px solid #ffffff1c; border-radius:16px; padding:26px; max-width:340px; text-align:center; font-family:'Fragment Mono', monospace; }
+  #pvConfirm p { font-size:14px; color:#fff; line-height:1.5; } #pvConfirm p span { display:block; color:#889; font-size:12px; margin-top:7px; }
+  #pvConfirm .b { display:flex; gap:10px; justify-content:center; margin-top:20px; }
+  #pvConfirm button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:13px; border-radius:9px; padding:9px 18px; border:1px solid #ffffff22; background:transparent; color:#cfe; }
+  #pvConfirm .yes { background:var(--hot); border:none; color:#fff; font-weight:bold; }
   #pvFrame { border:0; background:#000; }   /* sized by JS to a centered 4:3 box (matches the camera) */
   /* cover the frame while a version boots so its landing/START never flashes */
   #cover { position:absolute; inset:0; z-index:2; display:grid; place-items:center; text-align:center; color:#667;
@@ -85,10 +100,6 @@
 </style>
 </head>
 <body>
-<div id="recstrip">
-  <span>🎥 We record your session — camera + audio — just for the fun public gallery. <b>Rather not?</b> You can turn it off, and delete yours anytime.</span>
-  <button id="recStripBtn">turn recording off</button>
-</div>
 <div class="layout">
   <div class="left">
     <h1>AIR<span class="z">WAVES</span></h1>
@@ -101,7 +112,7 @@
   </div>
   <div class="right">
     <div class="pv-bar"><b id="pvTag">AIRWAVES</b><span class="t" id="pvTitle">pick a version →</span>
-      <span class="sp"></span><button id="pvFull">⛶ fullscreen</button></div>
+      <span class="sp"></span><button id="pvStop" style="display:none">◼ stop</button><button id="pvFull">⛶ fullscreen</button></div>
     <div class="stage">
       <iframe id="pvFrame" allow="camera; microphone; autoplay; fullscreen"></iframe>
       <div id="cover"><div><div class="big">▸</div><span id="coverText">click “open” on any version — it loads here paused; press play to start</span></div></div>
@@ -126,19 +137,6 @@
 const heads = document.getElementById('heads');
 document.getElementById('headsOk').onclick = () => { heads.classList.add('gone'); try { localStorage.setItem('air-versions-heads', '1'); } catch (e) {} };
 if (!localStorage.getItem('air-versions-heads')) heads.classList.remove('gone');
-
-// persistent top strip — reflects/controls the global recording consent
-const strip = document.getElementById('recstrip'), stripBtn = document.getElementById('recStripBtn');
-function syncStrip() {
-  const off = localStorage.getItem('air-rec-consent') === 'off';
-  strip.classList.toggle('off', off);
-  strip.querySelector('span').innerHTML = off
-    ? '⏸ Session recording is <b>off</b> — nothing is captured. Turn it back on whenever.'
-    : '🎥 We record your session — camera + audio — just for the fun public gallery. <b>Rather not?</b> You can turn it off, and delete yours anytime.';
-  stripBtn.textContent = off ? '▶ turn recording on' : 'turn recording off';
-}
-stripBtn.onclick = () => { try { localStorage.setItem('air-rec-consent', localStorage.getItem('air-rec-consent') === 'off' ? 'on' : 'off'); } catch (e) {} syncStrip(); };
-syncStrip();
 
 const RUN = (tag) => `./versions/${tag}.html`;   // baked locally, same origin
 const V = [
@@ -174,6 +172,7 @@ addEventListener('resize', fitFrame); fitFrame();
 // recording consent — so the visitor starts it (and the camera) themselves.
 pvFrame.onload = () => { requestAnimationFrame(() => cover.classList.add('hidden')); };
 document.getElementById('pvFull').onclick = () => (pvFrame.requestFullscreen || pvFrame.webkitRequestFullscreen)?.call(pvFrame);
+const pvStop = document.getElementById('pvStop');
 
 function loadVersion(tag, title, art) {
   document.querySelectorAll('article.active').forEach(a => a.classList.remove('active'));
@@ -183,8 +182,24 @@ function loadVersion(tag, title, art) {
   coverText.innerHTML = 'opening ' + tag + '… <span class="loader"></span>';
   cover.classList.remove('hidden');              // cover only during the swap
   pvFrame.src = RUN(tag);                         // switching reloads → releases the old camera; opens paused
+  pvStop.style.display = '';                      // offer a way to stop + close the game
   setTimeout(() => window.reloadGallery && window.reloadGallery(), 2500);   // pick up the last play's upload
 }
+// stop the game in the pane and finalize its recording (the version's own recorder keeps the take)
+function closePreview() {
+  try { pvFrame.contentWindow?.airRecorder?.finish(); } catch (e) {}
+  setTimeout(() => {
+    pvFrame.src = 'about:blank';                  // release camera; ends the game
+    document.querySelectorAll('article.active').forEach(a => a.classList.remove('active'));
+    document.getElementById('pvTag').textContent = 'AIRWAVES';
+    document.getElementById('pvTitle').textContent = 'pick a version →';
+    coverText.innerHTML = 'stopped — click “open” on any version to play again';
+    cover.classList.remove('hidden');
+    pvStop.style.display = 'none';
+    window.reloadGallery && window.reloadGallery();   // show the take that was just saved
+  }, 500);                                        // let the final flush fire first
+}
+pvStop.onclick = closePreview;
 
 const posts = document.getElementById('posts');
 V.forEach(([tag, title, prompt, explain]) => {
@@ -206,14 +221,42 @@ import { listSessions, getUrl, getPosterUrl, deleteSession, isMine, forgetMine }
 const grid = document.getElementById('rgalGrid');
 const cards = new Map();   // session name -> card element (so we only add what's new)
 
+// enlarge lightbox — big player in a modal
+function openLight(urlP) {
+  let m = document.getElementById('pvLight');
+  if (!m) { m = document.createElement('div'); m.id = 'pvLight';
+    m.innerHTML = `<div class="lb"><button class="lx">✕</button><video controls playsinline></video></div>`;
+    document.body.appendChild(m);
+    const close = () => { const v = m.querySelector('video'); v.pause(); v.removeAttribute('src'); v.load(); m.classList.remove('show'); };
+    m.onclick = e => { if (e.target === m) close(); };
+    m.querySelector('.lx').onclick = close;
+    m._close = close;
+  }
+  const v = m.querySelector('video'); v.removeAttribute('src'); m.classList.add('show');
+  urlP.then(u => { if (u) { v.src = u; v.play().catch(() => {}); } });
+}
+// delete confirmation modal
+function confirmDelete(onYes) {
+  let m = document.getElementById('pvConfirm');
+  if (!m) { m = document.createElement('div'); m.id = 'pvConfirm';
+    m.innerHTML = `<div class="cf"><p>Delete this clip?<span>It’s removed from the gallery for everyone — can’t be undone.</span></p><div class="b"><button class="no">Cancel</button><button class="yes">Delete</button></div></div>`;
+    document.body.appendChild(m); m.onclick = e => { if (e.target === m) m.classList.remove('show'); };
+  }
+  m.classList.add('show');
+  m.querySelector('.no').onclick = () => m.classList.remove('show');
+  m.querySelector('.yes').onclick = () => { m.classList.remove('show'); onYes(); };
+}
+
 function makeCard(s) {
   const el = document.createElement('div'); el.className = 'gcard fresh';
-  el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
+  el.innerHTML = `<div class="gv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
   const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-  v.addEventListener('play', () => grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }));   // only one plays at a time
+  v.addEventListener('play', () => { v.classList.add('live'); grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
+  v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                  // dim back to the start
   v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } };
+  el.querySelector('.mx').onclick = () => openLight(getUrl(s.item).catch(() => null));
   if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'remove yours';
-    rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); cards.delete(s.name); } catch (e) { rm.textContent = '!'; } }; el.appendChild(rm); }
+    rm.onclick = () => confirmDelete(async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); cards.delete(s.name); } catch (e) { rm.textContent = '!'; } }); el.appendChild(rm); }
   setTimeout(() => el.classList.remove('fresh'), 1300);
   return el;
 }

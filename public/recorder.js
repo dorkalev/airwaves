@@ -28,7 +28,7 @@ const audioTracks = () => { const t = []; (window.__airCtxs || []).forEach(c => 
 
 const LS = 'air-rec-consent';
 let consent = localStorage.getItem(LS);   // 'on' | 'off' | null
-let recorder = null, chunks = [], done = false, capT = null, armed = false;
+let recorder = null, chunks = [], done = false, capT = null;
 let sessionPath = null, posterDone = false, flushT = null, flushing = false, stopCopy = null;
 
 // ---- UI ----
@@ -37,6 +37,9 @@ style.textContent = `
   #airbar { position:fixed; left:12px; bottom:12px; z-index:9999; display:flex; gap:8px; font-family:'Fragment Mono',monospace; }
   #airbar button { cursor:pointer; font-size:12px; border-radius:20px; padding:7px 12px; border:1px solid #ffffff22; background:#12121ecc; color:#cfe; backdrop-filter:blur(4px); }
   #airToggle.on { color:#ff8aa8; border-color:#ff2e8855; } #airToggle.off { color:#8a94a5; }
+  #airStop { display:none; color:#0a0a12; background:#b6ff2e; border-color:#b6ff2e; font-weight:bold; }
+  #airSkip { display:inline-block; margin:12px 0 0 14px; background:transparent; border:none; color:#8a94a5; font-size:13px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; font-family:'Fragment Mono',monospace; opacity:.7; vertical-align:middle; }
+  #airSkip:hover { color:#cfe; opacity:1; }
   #airToggle .dot { display:none; } #airToggle.rec .dot { display:inline; animation:airblink 1s steps(1) infinite; }
   @keyframes airblink { 50% { opacity:.25; } }
   #airConsent, #airGallery { position:fixed; inset:0; z-index:10000; display:grid; place-items:center; background:#0a0a12dd; backdrop-filter:blur(6px); font-family:'Fragment Mono',monospace; color:#e8ebf0; padding:20px; }
@@ -59,14 +62,32 @@ style.textContent = `
   #airToast.show { opacity:1; transform:none; }
   #airToast.err { background:#ff2e88; color:#fff; }
   #airToast .c { display:inline-block; margin-left:6px; opacity:.7; }
+  #airGallery .sc .sv { position:relative; }
+  #airGallery .sc video { filter:brightness(.42); transition:filter .25s ease; }
+  #airGallery .sc video.live { filter:none; }
+  #airGallery .sc .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
+  #airGallery .sc .mx:hover { border-color:#29f4ff; color:#fff; }
+  #airLight { position:fixed; inset:0; z-index:10002; display:none; place-items:center; background:#0a0a12ee; backdrop-filter:blur(8px); padding:24px; }
+  #airLight.show { display:grid; }
+  #airLight .lb { position:relative; }
+  #airLight video { max-width:90vw; max-height:86vh; border-radius:12px; background:#000; box-shadow:0 20px 60px #000c; display:block; }
+  #airLight .lx { position:absolute; top:-15px; right:-15px; width:36px; height:36px; border-radius:50%; border:none; background:#ff2e88; color:#fff; font-size:16px; cursor:pointer; box-shadow:0 4px 14px #000a; }
+  #airConfirm { position:fixed; inset:0; z-index:10003; display:none; place-items:center; background:#0a0a12dd; backdrop-filter:blur(6px); padding:24px; font-family:'Fragment Mono',monospace; }
+  #airConfirm.show { display:grid; }
+  #airConfirm .cf { background:#12121e; border:1px solid #ffffff1c; border-radius:16px; padding:26px; max-width:340px; text-align:center; color:#e8ebf0; }
+  #airConfirm p { font-size:14px; color:#fff; line-height:1.5; } #airConfirm p span { display:block; color:#889; font-size:12px; margin-top:7px; }
+  #airConfirm .b { display:flex; gap:10px; justify-content:center; margin-top:20px; }
+  #airConfirm button { cursor:pointer; font-family:'Fragment Mono',monospace; font-size:13px; border-radius:9px; padding:9px 18px; border:1px solid #ffffff22; background:transparent; color:#cfe; }
+  #airConfirm .yes { background:#ff2e88; border:none; color:#fff; font-weight:bold; }
 `;
 document.head.appendChild(style);
 
 const bar = document.createElement('div');
 bar.id = 'airbar';
-bar.innerHTML = `<button id="airToggle"><span class="dot">● </span><span class="lbl"></span></button><button id="airGal" title="gallery">🖼</button>`;
+bar.innerHTML = `<button id="airToggle"><span class="dot">● </span><span class="lbl"></span></button><button id="airStop" title="stop & save this take">◼ finish</button><button id="airGal" title="gallery">🖼</button>`;
 document.body.appendChild(bar);
 const $t = document.getElementById('airToggle');
+const $stop = document.getElementById('airStop');
 
 let toastEl = null, toastT = null, saveCount = 0;
 function toast(msg, err) {
@@ -79,22 +100,22 @@ function refresh() {
   $t.className = consent === 'on' ? 'on' : 'off';
   if (consent === 'on' && recorder) $t.classList.add('rec');
   $t.querySelector('.lbl').textContent = consent === 'on' ? (recorder ? 'recording' : 'record: on') : 'record: off';
+  $stop.style.display = recorder ? 'inline-block' : 'none';   // only offer "finish" while a take is running
 }
+// stop the running take and keep it (final flush). To record again, toggle
+// recording on in the corner, or re-open the version.
+function finishTake() {
+  if (!recorder) return;
+  stopCapture(false);
+}
+window.airRecorder = { finish: finishTake, isRecording: () => !!recorder };
 function setConsent(v) { consent = v; try { localStorage.setItem(LS, v); } catch (e) {}
-  if (v === 'on') { armed = false; arm(); if (document.querySelector('canvas')) startCapture(); }
+  if (v === 'on') startCapture();   // begins as soon as a canvas is up (startCapture self-retries)
   else stopCapture(true);
   refresh();
 }
 
 // ---- capture ----
-function arm() {
-  if (armed || consent !== 'on') return; armed = true;
-  // start once the app starts — a real gesture OR a programmatic start (the
-  // versions preview auto-clicks START, which fires 'click' but not 'pointerdown')
-  const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('click', go, true); setTimeout(startCapture, 900); };
-  window.addEventListener('pointerdown', go, true);
-  window.addEventListener('click', go, true);
-}
 function startCapture() {
   if (recorder || consent !== 'on') return;
   const cv = document.querySelector('canvas'); if (!cv) { setTimeout(startCapture, 800); return; }
@@ -150,6 +171,29 @@ async function finish() {
   await flush();                                       // final save
 }
 
+// ---- enlarge lightbox + delete confirm (shared by the overlay gallery) ----
+function airLight(urlP) {
+  let m = document.getElementById('airLight');
+  if (!m) { m = document.createElement('div'); m.id = 'airLight';
+    m.innerHTML = `<div class="lb"><button class="lx">✕</button><video controls playsinline></video></div>`;
+    document.body.appendChild(m);
+    const close = () => { const v = m.querySelector('video'); v.pause(); v.removeAttribute('src'); v.load(); m.classList.remove('show'); };
+    m.onclick = e => { if (e.target === m) close(); }; m.querySelector('.lx').onclick = close;
+  }
+  const v = m.querySelector('video'); v.removeAttribute('src'); m.classList.add('show');
+  urlP.then(u => { if (u) { v.src = u; v.play().catch(() => {}); } });
+}
+function airConfirm(onYes) {
+  let m = document.getElementById('airConfirm');
+  if (!m) { m = document.createElement('div'); m.id = 'airConfirm';
+    m.innerHTML = `<div class="cf"><p>Delete this clip?<span>It’s removed from the gallery for everyone — can’t be undone.</span></p><div class="b"><button class="no">Cancel</button><button class="yes">Delete</button></div></div>`;
+    document.body.appendChild(m); m.onclick = e => { if (e.target === m) m.classList.remove('show'); };
+  }
+  m.classList.add('show');
+  m.querySelector('.no').onclick = () => m.classList.remove('show');
+  m.querySelector('.yes').onclick = () => { m.classList.remove('show'); onYes(); };
+}
+
 // ---- gallery ----
 async function openGallery() {
   let g = document.getElementById('airGallery');
@@ -160,17 +204,19 @@ async function openGallery() {
     more.textContent = items.length ? '' : 'no sessions yet';
     for (const s of items) {
       const el = document.createElement('div'); el.className = 'sc';
-      el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="m">${new Date(s.ts).toLocaleString()}</div>`;
+      el.innerHTML = `<div class="sv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="m">${new Date(s.ts).toLocaleString()}</div>`;
       const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.addEventListener('play', () => grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }));   // only one plays at a time
+      v.addEventListener('play', () => { v.classList.add('live'); grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
+      v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                  // dim back to the start
       v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } };
-      if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑 remove'; rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); } catch (e) { rm.textContent = 'failed'; } }; el.appendChild(rm); }
+      el.querySelector('.mx').onclick = () => airLight(getUrl(s.item).catch(() => null));
+      if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑 remove'; rm.onclick = () => airConfirm(async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); } catch (e) { rm.textContent = 'failed'; } }); el.appendChild(rm); }
       grid.appendChild(el);
     }
   } catch (e) { console.error(e); more.textContent = 'gallery error: ' + (e.code || e.message); }
 }
 
-// ---- consent popup ----
+// ---- consent popup (fallback for apps with no START button) ----
 function showConsent() {
   const m = document.createElement('div'); m.id = 'airConsent';
   m.innerHTML = `<div class="c"><h3>Record this session?</h3>
@@ -182,9 +228,32 @@ function showConsent() {
   m.querySelector('#cOff').onclick = () => { setConsent('off'); m.remove(); };
 }
 
+// ---- fold the recording choice into the game's START button ----
+// primary "Start + record" opts in; a quiet "skip recording" beside it opts out.
+let skipping = false;
+function integrateStart() {
+  const btn = document.getElementById('start');
+  if (!btn) return false;
+  if (!btn.__air) {
+    btn.__air = true;
+    btn.textContent = 'START + RECORD ▸';
+    const skip = document.createElement('button');
+    skip.id = 'airSkip'; skip.type = 'button'; skip.textContent = 'skip recording';
+    btn.insertAdjacentElement('afterend', skip);
+    // capture phase → decide recording BEFORE the app's own start handler runs
+    btn.addEventListener('click', () => { if (!skipping) setConsent('on'); }, true);
+    skip.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); skipping = true; setConsent('off'); btn.click(); skipping = false; }, false);
+  }
+  return true;
+}
+
 $t.onclick = () => setConsent(consent === 'on' ? 'off' : 'on');
+$stop.onclick = () => { finishTake(); toast('◼ Take finished — saved to the gallery'); };
 document.getElementById('airGal').onclick = openGallery;
 window.addEventListener('visibilitychange', () => { if (document.hidden) stopCapture(false); });
 window.addEventListener('pagehide', () => stopCapture(false));
 
-if (consent === null) showConsent(); else { refresh(); if (consent === 'on') arm(); }
+refresh();
+if (integrateStart()) { /* START carries the choice → capture begins on that click; no separate popup */ }
+else if (consent === null) showConsent();
+else if (consent === 'on') startCapture();

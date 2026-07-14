@@ -23,6 +23,23 @@
   .run .meta { padding:9px 12px; font-size:11px; color:#9aa; }
   .kill { position:absolute; top:8px; right:8px; font-size:11px; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:8px; padding:5px 10px; cursor:pointer; background:#000000cc; }
   .kill:hover { background:#7a0b3d; color:#fff; }
+  .run .rv { position:relative; }
+  .run video { filter:brightness(.42); transition:filter .25s ease; }
+  .run video.live { filter:none; }
+  .run .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
+  .run .mx:hover { border-color:var(--cyan); color:#fff; }
+  #pvLight { position:fixed; inset:0; z-index:200; display:none; place-items:center; background:#0a0a12ee; backdrop-filter:blur(8px); padding:24px; }
+  #pvLight.show { display:grid; }
+  #pvLight .lb { position:relative; }
+  #pvLight video { max-width:90vw; max-height:86vh; border-radius:12px; background:#000; box-shadow:0 20px 60px #000c; display:block; }
+  #pvLight .lx { position:absolute; top:-15px; right:-15px; width:36px; height:36px; border-radius:50%; border:none; background:var(--hot); color:#fff; font-size:16px; cursor:pointer; }
+  #pvConfirm { position:fixed; inset:0; z-index:201; display:none; place-items:center; background:#0a0a12dd; backdrop-filter:blur(6px); padding:24px; }
+  #pvConfirm.show { display:grid; }
+  #pvConfirm .cf { background:#12121e; border:1px solid #ffffff1c; border-radius:16px; padding:26px; max-width:340px; text-align:center; }
+  #pvConfirm p { font-size:14px; color:#fff; line-height:1.5; } #pvConfirm p span { display:block; color:#889; font-size:12px; margin-top:7px; }
+  #pvConfirm .b { display:flex; gap:10px; justify-content:center; margin-top:20px; }
+  #pvConfirm button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:13px; border-radius:9px; padding:9px 18px; border:1px solid #ffffff22; background:transparent; color:#cfe; }
+  #pvConfirm .yes { background:var(--hot); border:none; color:#fff; font-weight:bold; }
   #more { color:#778; font-size:12px; padding:16px 0; }
   .back { color:var(--cyan); font-size:12px; text-decoration:none; }
 </style>
@@ -62,6 +79,27 @@ onAuthStateChanged(auth, user => {
     $('out').onclick = () => signOut(auth).then(() => location.reload());
   } else { $('signin').style.display = ''; $('who').textContent = ''; }
 });
+function openLight(urlP) {
+  let m = document.getElementById('pvLight');
+  if (!m) { m = document.createElement('div'); m.id = 'pvLight';
+    m.innerHTML = `<div class="lb"><button class="lx">✕</button><video controls playsinline></video></div>`;
+    document.body.appendChild(m);
+    const close = () => { const v = m.querySelector('video'); v.pause(); v.removeAttribute('src'); v.load(); m.classList.remove('show'); };
+    m.onclick = e => { if (e.target === m) close(); }; m.querySelector('.lx').onclick = close;
+  }
+  const v = m.querySelector('video'); v.removeAttribute('src'); m.classList.add('show');
+  urlP.then(u => { if (u) { v.src = u; v.play().catch(() => {}); } });
+}
+function confirmDelete(onYes) {
+  let m = document.getElementById('pvConfirm');
+  if (!m) { m = document.createElement('div'); m.id = 'pvConfirm';
+    m.innerHTML = `<div class="cf"><p>Delete this clip?<span>It’s removed from the gallery for everyone — can’t be undone.</span></p><div class="b"><button class="no">Cancel</button><button class="yes">Delete</button></div></div>`;
+    document.body.appendChild(m); m.onclick = e => { if (e.target === m) m.classList.remove('show'); };
+  }
+  m.classList.add('show');
+  m.querySelector('.no').onclick = () => m.classList.remove('show');
+  m.querySelector('.yes').onclick = () => { m.classList.remove('show'); onYes(); };
+}
 async function loadAll() {
   const board = $('board'); $('more').textContent = 'loading…';
   try {
@@ -71,15 +109,14 @@ async function loadAll() {
     $('more').textContent = all.length ? '' : 'no sessions yet';
     for (const s of all) {
       const el = document.createElement('div'); el.className = 'run';
-      el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="meta">${new Date(s.ts).toLocaleString()}</div><button class="kill">🗑 delete</button>`;
+      el.innerHTML = `<div class="rv"><video playsinline loop muted preload="none"></video><button class="mx" title="enlarge">⛶</button></div><div class="meta">${new Date(s.ts).toLocaleString()}</div><button class="kill">🗑 delete</button>`;
       const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.addEventListener('play', () => board.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }));   // only one plays at a time
+      v.addEventListener('play', () => { v.classList.add('live'); board.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
+      v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                   // dim back to the start
       v.addEventListener('click', async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } });
-      const btn = el.querySelector('.kill'); let armed = 0;
-      btn.onclick = async () => {
-        if (Date.now() - armed > 3000) { armed = Date.now(); btn.textContent = 'SURE?'; setTimeout(() => btn.isConnected && (btn.textContent = '🗑 delete'), 3000); return; }
-        btn.textContent = '…'; try { await deleteSession(s.item); el.remove(); } catch (e) { btn.textContent = 'failed'; }
-      };
+      el.querySelector('.mx').onclick = () => openLight(getUrl(s.item).catch(() => null));
+      const btn = el.querySelector('.kill');
+      btn.onclick = () => confirmDelete(async () => { btn.textContent = '…'; try { await deleteSession(s.item); el.remove(); } catch (e) { btn.textContent = 'failed'; } });
       board.appendChild(el);
     }
   } catch (e) { console.error(e); $('more').textContent = 'error: ' + (e.code || e.message); }
