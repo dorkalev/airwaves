@@ -34,13 +34,42 @@
   .footer a { color:var(--cyan); text-decoration:none; }
   .loader { display:inline-block; width:14px; height:14px; border:2px solid #ffffff33; border-top-color:var(--cyan); border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  #reviewbar { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:8; display:flex; align-items:center; gap:10px; background:#12121ee6; border:1px solid #ffffff22; border-radius:12px; padding:10px 14px; font-size:12px; color:#cfe; max-width:94vw; flex-wrap:wrap; justify-content:center; }
+  #reviewbar .rtext { color:#c7c7d5; max-width:340px; } #reviewbar b { color:#fff; }
+  #reviewbar button { font-family:'Fragment Mono',monospace; font-size:12px; border-radius:8px; padding:6px 12px; cursor:pointer; border:1px solid #ffffff22; background:transparent; color:#cfe; }
+  #reviewbar #postBtn { background:var(--lime); color:#0a0a12; border:none; }
+  #reviewbar #postStatus { color:var(--cyan); }
+  .galwrap { width:min(1000px,94vw); max-height:88vh; display:flex; flex-direction:column; background:#0c0c14; border:1px solid #ffffff1c; border-radius:16px; overflow:hidden; }
+  .galtop { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; font-family:'Bangers',cursive; font-size:22px; color:var(--cyan); border-bottom:1px solid #ffffff14; }
+  .galgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; padding:16px; overflow-y:auto; }
+  .scard { background:#12121e; border:1px solid #ffffff14; border-radius:12px; overflow:hidden; position:relative; }
+  .scard video { width:100%; aspect-ratio:4/3; object-fit:cover; background:#000; display:block; cursor:zoom-in; }
+  .scard .meta { padding:8px 10px; font-size:11px; color:#9aa; }
+  .scard .rm { position:absolute; top:8px; right:8px; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:7px; padding:3px 8px; cursor:pointer; background:#000000cc; font-size:11px; }
+  #galmore { text-align:center; color:#778; font-size:12px; padding:0 0 14px; }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
 <video id="cam" playsinline muted></video>
 <div id="hud"><div id="status">ready</div></div>
-<div class="toolbar" style="display:none" id="toolbar"><button class="tool" id="clearBtn">clear all</button></div>
+<div class="toolbar" style="display:none" id="toolbar">
+  <button class="tool" id="recBtn">● rec</button>
+  <button class="tool" id="galBtn">🖼 gallery</button>
+  <button class="tool" id="clearBtn">clear all</button>
+</div>
+<div id="reviewbar" style="display:none">
+  <span class="rtext">Post this session to the public gallery? Your <b>camera + audio</b> will be public. Remove it any time.</span>
+  <button id="postBtn">post</button><button id="discardBtn">discard</button><span id="postStatus"></span>
+</div>
+<!-- sessions gallery -->
+<div class="overlay gone" id="gallery">
+  <div class="galwrap">
+    <div class="galtop"><span>AIRWAVES · sessions</span><button class="tool" id="galClose">✕ close</button></div>
+    <div class="galgrid" id="galgrid"></div>
+    <div id="galmore"></div>
+  </div>
+</div>
 <div class="overlay" id="boot">
   <div>
     <div class="title">AIR<span class="zap">LOOPER</span></div>
@@ -56,6 +85,7 @@
 <div class="footer">a sibling of <a href="https://airslice.dorkalev.com" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" target="_blank" rel="noopener">Dor Kalev</a> · hands by <a href="https://ai.google.dev/edge/mediapipe" target="_blank" rel="noopener">MediaPipe</a></div>
 
 <script type="module">
+import { getFirebase, uploadSession, listSessions, getUrl, getPosterUrl, deleteSession, rememberMine, forgetMine, isMine } from './firebase.js';
 const $ = id => document.getElementById(id);
 const HAND_TASK = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
@@ -74,7 +104,7 @@ function padRect(i) { return { x: GX + i*CW, y: GY, w: CW, h: GH }; }
 function padAt(px, py) { if (px < GX || px > GX+GW || py < GY || py > GY+GH) return -1; return Math.min(NPADS-1, Math.floor((px-GX)/CW)); }
 
 // ---- dead-simple looper: pinch cycles empty → recording → looping → empty ----
-let AC = null, node = null, micStream = null, sr = 44100;
+let AC = null, node = null, micStream = null, sr = 44100, recDest = null;
 const MAX_SEC = 20;
 const pads = Array.from({ length: NPADS }, () => ({ state: 'empty', buf: null, wi: 0, len: 0, pp: 0 }));
 const level = new Float32Array(NPADS);
@@ -88,9 +118,10 @@ function pressPad(i) {
 
 function initAudio() {
   AC = new (window.AudioContext || window.webkitAudioContext)(); sr = AC.sampleRate;
+  recDest = AC.createMediaStreamDestination();   // tap the loop output for session recording
   const source = AC.createMediaStreamSource(micStream);
   node = AC.createScriptProcessor(2048, 1, 1);
-  source.connect(node); node.connect(AC.destination);
+  source.connect(node); node.connect(AC.destination); node.connect(recDest);
   node.onaudioprocess = (e) => {
     const inp = e.inputBuffer.getChannelData(0), out = e.outputBuffer.getChannelData(0);
     const lvl = new Float32Array(NPADS);
@@ -196,6 +227,56 @@ async function engage() {
 }
 $('start').onclick = engage;
 $('clearBtn').onclick = () => pads.forEach(p => { p.state = 'empty'; p.len = 0; });
+
+// ---- session recording → shared Firebase gallery (AIRSLICE spec) ----
+let recorder = null, recChunks = [], recBlob = null, recState = 'idle';
+function toggleRec() {
+  if (recState === 'idle') {
+    const cs = cv.captureStream(30);
+    const mixed = new MediaStream([...cs.getVideoTracks(), ...(recDest ? recDest.stream.getAudioTracks() : [])]);
+    recChunks = []; recBlob = null;
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 1_200_000 });
+    recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+    recorder.onstop = () => { recBlob = new Blob(recChunks, { type: recorder.mimeType || 'video/webm' }); $('reviewbar').style.display = 'flex'; $('postStatus').textContent = `clip · ${(recBlob.size/1048576).toFixed(1)} MB`; };
+    recorder.start(); recState = 'recording'; $('recBtn').textContent = '■ stop'; $('recBtn').style.color = '#ff8aa8';
+  } else if (recState === 'recording') {
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    recState = 'review'; $('recBtn').textContent = '● rec'; $('recBtn').style.color = '';
+  }
+}
+async function postSession() {
+  if (!recBlob) return; const btn = $('postBtn'); btn.disabled = true; $('postStatus').textContent = 'posting…';
+  try {
+    const poster = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7));
+    const name = await uploadSession(recBlob, 'webm', poster);
+    rememberMine(name); recBlob = null; recState = 'idle';
+    $('postStatus').textContent = 'posted ✔'; setTimeout(() => { $('reviewbar').style.display = 'none'; btn.disabled = false; }, 1400);
+  } catch (e) { console.error(e); $('postStatus').textContent = 'failed: ' + (e.code || e.message); btn.disabled = false; }
+}
+async function openGallery() {
+  $('gallery').classList.remove('gone'); const grid = $('galgrid'); grid.innerHTML = ''; $('galmore').textContent = 'loading…';
+  try {
+    const { items } = await listSessions(null, 24);
+    $('galmore').textContent = items.length ? '' : 'no sessions yet — hit ● rec, then post';
+    for (const s of items) {
+      const el = document.createElement('div'); el.className = 'scard';
+      el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="meta">${new Date(s.ts).toLocaleString()}</div>`;
+      const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
+      v.addEventListener('click', async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } });
+      if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑 remove';
+        rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); } catch (e) { rm.textContent = 'failed'; } };
+        el.appendChild(rm); }
+      grid.appendChild(el);
+    }
+  } catch (e) { console.error(e); $('galmore').textContent = 'gallery error: ' + (e.code || e.message); }
+}
+$('recBtn').onclick = toggleRec;
+$('postBtn').onclick = postSession;
+$('discardBtn').onclick = () => { recBlob = null; recState = 'idle'; $('reviewbar').style.display = 'none'; };
+$('galBtn').onclick = openGallery;
+$('galClose').onclick = () => $('gallery').classList.add('gone');
+
 window.__airlooper = { get running(){return running;} };
 </script>
 </body>

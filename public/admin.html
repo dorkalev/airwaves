@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIRWAVES — moderation</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fragment+Mono&display=swap" rel="stylesheet">
+<style>
+  :root { --hot:#ff2e88; --cyan:#29f4ff; --lime:#b6ff2e; --bg:#0a0a12; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:#fff; font-family:'Fragment Mono', monospace; min-height:100vh; }
+  .wrap { max-width:1100px; margin:0 auto; padding:40px 20px 60px; }
+  .title { font-family:'Bangers', cursive; font-size:clamp(38px,7vw,64px); text-shadow:3px 3px 0 var(--hot); transform:rotate(-2deg); }
+  .btn { font-family:'Bangers', cursive; font-size:22px; color:#0a0a12; background:var(--lime); border:none; border-radius:12px; padding:12px 28px; cursor:pointer; box-shadow:0 4px 0 #5c8a0e; margin-top:20px; }
+  .who { font-size:12px; color:#9aa; margin-top:16px; } .who b { color:var(--cyan); font-weight:400; } .who a { color:var(--hot); cursor:pointer; }
+  #gate.err .who { color:var(--hot); }
+  .count { font-size:12px; color:#778; margin:18px 0 6px; }
+  .board { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }
+  .run { background:#12121e; border:1px solid #ffffff14; border-radius:14px; overflow:hidden; position:relative; }
+  .run video { width:100%; aspect-ratio:4/3; object-fit:cover; background:#000; display:block; cursor:zoom-in; }
+  .run .meta { padding:9px 12px; font-size:11px; color:#9aa; }
+  .kill { position:absolute; top:8px; right:8px; font-size:11px; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:8px; padding:5px 10px; cursor:pointer; background:#000000cc; }
+  .kill:hover { background:#7a0b3d; color:#fff; }
+  #more { color:#778; font-size:12px; padding:16px 0; }
+  .back { color:var(--cyan); font-size:12px; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title">AIRWAVES 🛡️</div>
+  <div id="gate">
+    <button class="btn" id="signin">Sign in with Google</button>
+    <div class="who" id="who"></div>
+  </div>
+  <div id="adminui" style="display:none">
+    <div class="count" id="count"></div>
+    <div class="board" id="board"></div>
+    <div id="more"></div>
+    <a class="back" href="./">← back to AIRWAVES</a>
+  </div>
+</div>
+<script type="module">
+import { getFirebase, listSessions, getUrl, getPosterUrl, deleteSession, ADMIN_EMAIL, DEMO } from './firebase.js';
+import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+const $ = id => document.getElementById(id);
+const { auth } = await getFirebase();
+let loaded = false;
+$('signin').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => { $('gate').classList.add('err'); $('who').textContent = 'sign-in failed: ' + (e.code || e.message); });
+onAuthStateChanged(auth, user => {
+  const isAdmin = user && user.email === ADMIN_EMAIL && user.emailVerified;
+  $('adminui').style.display = 'none'; $('gate').classList.remove('err');
+  if (isAdmin) {
+    $('signin').style.display = 'none';
+    $('who').innerHTML = `signed in as <b>${user.email}</b> — <a id="out">sign out</a>`;
+    $('out').onclick = () => signOut(auth).then(() => location.reload());
+    $('adminui').style.display = ''; if (!loaded) { loaded = true; loadAll(); }
+  } else if (user && user.email) {
+    $('signin').style.display = 'none'; $('gate').classList.add('err');
+    $('who').innerHTML = `signed in as ${user.email} — not authorized. <a id="out">sign out</a>`;
+    $('out').onclick = () => signOut(auth).then(() => location.reload());
+  } else { $('signin').style.display = ''; $('who').textContent = ''; }
+});
+async function loadAll() {
+  const board = $('board'); $('more').textContent = 'loading…';
+  try {
+    let token = null, all = [];
+    do { const { items, next } = await listSessions(token, 100); all.push(...items); token = next; } while (token);
+    $('count').textContent = `${all.length} session${all.length === 1 ? '' : 's'} · ${DEMO}`;
+    $('more').textContent = all.length ? '' : 'no sessions yet';
+    for (const s of all) {
+      const el = document.createElement('div'); el.className = 'run';
+      el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="meta">${new Date(s.ts).toLocaleString()}</div><button class="kill">🗑 delete</button>`;
+      const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
+      v.addEventListener('click', async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } });
+      const btn = el.querySelector('.kill'); let armed = 0;
+      btn.onclick = async () => {
+        if (Date.now() - armed > 3000) { armed = Date.now(); btn.textContent = 'SURE?'; setTimeout(() => btn.isConnected && (btn.textContent = '🗑 delete'), 3000); return; }
+        btn.textContent = '…'; try { await deleteSession(s.item); el.remove(); } catch (e) { btn.textContent = 'failed'; }
+      };
+      board.appendChild(el);
+    }
+  } catch (e) { console.error(e); $('more').textContent = 'error: ' + (e.code || e.message); }
+}
+</script>
+</body>
+</html>
