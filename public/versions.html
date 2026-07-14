@@ -50,7 +50,17 @@
   .pv-bar b { color:var(--cyan); font-size:15px; } .pv-bar .t { color:#8a94a5; } .pv-bar .sp { margin-left:auto; }
   .pv-bar button { cursor:pointer; background:transparent; border:1px solid #ffffff22; color:#cfe; border-radius:8px; padding:5px 11px; }
   .pv-bar button:hover { border-color:var(--cyan); color:#fff; }
-  .stage { flex:1; position:relative; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .stage { flex:1 1 auto; min-height:0; position:relative; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .rgal { flex:0 0 34%; display:flex; flex-direction:column; border-top:1px solid #ffffff1c; background:#0a0a12; }
+  .rgbar { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; font-family:'Fragment Mono', monospace; font-size:12px; color:#8a94a5; letter-spacing:.06em; }
+  .rgbar button { cursor:pointer; font-family:'Fragment Mono', monospace; font-size:11px; color:#cfe; background:transparent; border:1px solid #ffffff22; border-radius:8px; padding:4px 10px; }
+  .rgbar button:hover { border-color:var(--cyan); }
+  .rggrid { flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; padding:0 12px 12px; align-content:start; }
+  .gcard { background:#12121e; border:1px solid #ffffff14; border-radius:10px; overflow:hidden; position:relative; }
+  .gcard video { width:100%; aspect-ratio:4/3; object-fit:cover; background:#000; display:block; cursor:zoom-in; }
+  .gcard .gm { padding:5px 8px; font-size:10px; color:#889; }
+  .gcard .rm { position:absolute; top:6px; right:6px; font-size:10px; color:#ff8aa8; background:#000000cc; border:1px solid #ff2e8855; border-radius:6px; padding:2px 6px; cursor:pointer; }
+  .gempty { color:#667; font-size:12px; padding:14px; grid-column:1/-1; }
   #pvFrame { border:0; background:#000; }   /* sized by JS to a centered 4:3 box (matches the camera) */
   /* cover the frame while a version boots so its landing/START never flashes */
   #cover { position:absolute; inset:0; z-index:2; display:grid; place-items:center; text-align:center; color:#667;
@@ -90,6 +100,10 @@
     <div class="stage">
       <iframe id="pvFrame" allow="camera; microphone; autoplay; fullscreen"></iframe>
       <div id="cover"><div><div class="big">▶</div><span id="coverText">click “play” on any version — it starts here automatically</span></div></div>
+    </div>
+    <div class="rgal">
+      <div class="rgbar"><span>all sessions — every former play</span><button id="rgalRefresh">↻ refresh</button></div>
+      <div class="rggrid" id="rgalGrid"></div>
     </div>
   </div>
 </div>
@@ -175,6 +189,7 @@ function loadVersion(tag, title, art) {
   coverText.innerHTML = 'starting ' + tag + '… <span class="loader"></span>';
   cover.classList.remove('hidden');              // cover the frame so its landing never shows
   pvFrame.src = RUN(tag);                         // switching reloads → releases the old camera + auto-starts
+  setTimeout(() => window.reloadGallery && window.reloadGallery(), 2500);   // pick up the last play's upload
 }
 
 const posts = document.getElementById('posts');
@@ -189,6 +204,32 @@ V.forEach(([tag, title, prompt, explain]) => {
   a.querySelector('.go').onclick = () => loadVersion(tag, title, a);
   posts.appendChild(a);
 });
+</script>
+
+<script type="module">
+// "all sessions" gallery under the app — reads the shared Firebase (demos/airwaves/)
+import { listSessions, getUrl, getPosterUrl, deleteSession, isMine, forgetMine } from './firebase.js';
+const grid = document.getElementById('rgalGrid');
+async function loadGallery() {
+  grid.innerHTML = '<div class="gempty">loading…</div>';
+  try {
+    const { items } = await listSessions(null, 60);
+    grid.innerHTML = '';
+    if (!items.length) { grid.innerHTML = '<div class="gempty">no sessions yet — play a version to add one</div>'; return; }
+    for (const s of items) {
+      const el = document.createElement('div'); el.className = 'gcard';
+      el.innerHTML = `<video playsinline loop muted preload="none"></video><div class="gm">${new Date(s.ts).toLocaleDateString()}</div>`;
+      const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
+      v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } };
+      if (isMine(s.path)) { const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '🗑'; rm.title = 'remove yours';
+        rm.onclick = async () => { rm.textContent = '…'; try { await deleteSession(s.item); forgetMine(s.path); el.remove(); } catch (e) { rm.textContent = '!'; } }; el.appendChild(rm); }
+      grid.appendChild(el);
+    }
+  } catch (e) { console.error(e); grid.innerHTML = '<div class="gempty">gallery unavailable — on localhost this needs the App Check debug token registered</div>'; }
+}
+document.getElementById('rgalRefresh').onclick = loadGallery;
+window.reloadGallery = loadGallery;
+loadGallery();
 </script>
 </body>
 </html>
