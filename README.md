@@ -106,7 +106,7 @@ earlier direction.
 
 ### At a glance
 ```
-webcam ─▶ MediaPipe Hand Landmarker (on-device, WebGPU)
+webcam ─▶ MediaPipe Hand Landmarker on LiteRT (on-device, WebGPU)
        ─▶ 21 landmarks/hand, tracked frame-to-frame (smoothed, coasted)
        ─▶ gesture → note/gate mapping, quantized to a scale
        ─▶ Web Audio graph (oscillators / looper DSP → filter → delay)
@@ -116,7 +116,9 @@ Pure client-side. No build step — static HTML/JS/CSS served from `public/`.
 
 ### Hand tracking
 - `@mediapipe/tasks-vision` **HandLandmarker**, GPU delegate (WebGPU), fully
-  on-device — camera frames never leave the tab.
+  on-device — camera frames never leave the tab. MediaPipe runs the model on
+  **[LiteRT](https://ai.google.dev/edge/litert)** (Google's on-device runtime,
+  formerly TensorFlow Lite) — which is what the very first prompt (`/v0`) named.
 - The early versions' real bug was a fast render loop recomputing against stale
   camera frames. Fixed by giving each hand a **persistent identity across
   frames**, EMA-smoothing the landmarks, and **coasting** through dropped frames
@@ -169,5 +171,6 @@ npx serve public        # open the printed http://localhost:… in Chrome/Edge
   activate on their configured domains.
 
 ## License
-[MIT](LICENSE). Hand tracking by [Google MediaPipe](https://ai.google.dev/edge/mediapipe);
-sound via the Web Audio API. Built by [Dor Kalev](https://dorkalev.com).
+[MIT](LICENSE). Hand tracking by [Google MediaPipe](https://ai.google.dev/edge/mediapipe)
+on [LiteRT](https://ai.google.dev/edge/litert); sound via the Web Audio API.
+Built by [Dor Kalev](https://dorkalev.com).
