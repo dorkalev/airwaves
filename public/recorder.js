@@ -73,7 +73,7 @@ style.textContent = `
   #airToast.err { background:#ff2e88; color:#fff; }
   #airToast .c { display:inline-block; margin-left:6px; opacity:.7; }
   #airGallery .sc .sv { position:relative; }
-  #airGallery .sc video { filter:brightness(.72); transition:filter .25s ease; }
+  #airGallery .sc video { filter:brightness(.88); transition:filter .25s ease; }
   #airGallery .sc video.live { filter:none; }
   #airGallery .sc .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   #airGallery .sc .mx:hover { border-color:#29f4ff; color:#fff; }
