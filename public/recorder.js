@@ -34,8 +34,8 @@ const LS = 'air-rec-consent';
 // which build this clip is from: /v14 (or /v14.html) → 'v14'; anything else → 'live'
 const REC_VER = (location.pathname.match(/\/(v\d+)(?:\.html?)?$/i) || [])[1] || 'live';
 let consent = localStorage.getItem(LS);   // 'on' | 'off' | null
-let recorder = null, chunks = [], done = false, capT = null;
-let sessionPath = null, posterDone = false, flushT = null, flushing = false, stopCopy = null;
+let recorder = null, chunks = [], done = false, capT = null, capStartT = null;
+let sessionPath = null, posterDone = false, flushT = null, flushing = false, flushP = null, discarding = false, stopCopy = null;
 
 // ---- UI ----
 const style = document.createElement('style');
@@ -133,7 +133,8 @@ function setConsent(v) { consent = v; try { localStorage.setItem(LS, v); } catch
 // ---- capture ----
 function startCapture() {
   if (recorder || consent !== 'on') return;
-  const cv = document.querySelector('canvas'); if (!cv) { setTimeout(startCapture, 800); return; }
+  const cv = document.querySelector('canvas'); if (!cv) { capStartT = setTimeout(startCapture, 800); return; }  // tracked so it can be cancelled
+  capStartT = null;
   try {
     // downscale a copy of the app canvas → small, well-compressed clips (cheap to stream)
     const RW = 426, sc = Math.min(1, RW / (cv.width || RW));
@@ -144,7 +145,7 @@ function startCapture() {
     let copying = true; stopCopy = () => { copying = false; };
     (function copy() { if (!copying) return; try { rctx.drawImage(cv, 0, 0, rc.width, rc.height); } catch (e) {} requestAnimationFrame(copy); })();
     const mixed = new MediaStream([...rc.captureStream(24).getVideoTracks(), ...audioTracks()]);
-    chunks = []; done = false; sessionPath = null; posterDone = false;
+    chunks = []; done = false; sessionPath = null; posterDone = false; discarding = false;
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
     recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 600_000 });
     recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
@@ -155,35 +156,45 @@ function startCapture() {
     capT = setTimeout(() => stopCapture(false), 120000);  // bound total session length
   } catch (e) { console.warn('capture failed', e); recorder = null; }
 }
-// re-upload the growing clip to one fixed filename — "streaming" without append complexity
-async function flush() {
-  if (consent !== 'on' || flushing || !chunks.length) return;
+// Re-upload the growing clip to one fixed filename — "streaming" without append
+// complexity. (Tradeoff: each flush re-sends the whole clip, so upload bytes grow
+// with session length; bounded by the 120s cap.) Returns a promise so finish() can
+// await an in-flight save before the final one. isFinal forces a save even if tiny.
+function flush(isFinal) {
+  if (discarding || flushing || !chunks.length) return Promise.resolve();
+  if (consent !== 'on' && !isFinal) return Promise.resolve();
   flushing = true;
-  try {
-    if (!sessionPath) sessionPath = sessionName('webm', REC_VER);
-    const blob = new Blob(chunks, { type: 'video/webm' });
-    if (blob.size < 8000) return;
-    let poster = null;
-    if (!posterDone) { const cv = document.querySelector('canvas'); poster = cv ? await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7)) : null; }
-    const first = !posterDone;
-    await uploadTo(sessionPath, blob, poster);
-    if (first) { posterDone = true; rememberMine(sessionPath); }
-    saveCount++;
-    toast(first ? '☁ Saved to the gallery — remove it anytime'
-                : `☁ Session updated<span class="c">· save #${saveCount}</span>`);
-  } catch (e) { console.warn('flush failed', e); toast('⚠ Couldn\'t save — check your connection', true); }
-  finally { flushing = false; }
+  flushP = (async () => {
+    try {
+      if (!sessionPath) sessionPath = sessionName('webm', REC_VER);
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      if (blob.size < 8000 && !isFinal) return;        // skip near-empty interim saves; force on final
+      let poster = null;
+      if (!posterDone) { const cv = document.querySelector('canvas'); poster = cv ? await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.7)) : null; }
+      const first = !posterDone;
+      await uploadTo(sessionPath, blob, poster);
+      if (first) { posterDone = true; rememberMine(sessionPath); }
+      saveCount++;
+      toast(first ? '☁ Saved to the gallery — remove it anytime'
+                  : `☁ Session updated<span class="c">· save #${saveCount}</span>`);
+    } catch (e) { console.warn('flush failed', e); toast('⚠ Couldn\'t save — check your connection', true); }
+  })();
+  return flushP.finally(() => { flushing = false; flushP = null; });
 }
 function stopCapture(discard) {
+  if (discard) discarding = true;                      // refuse further/ in-flight uploads for a discarded take
+  if (capStartT) { clearTimeout(capStartT); capStartT = null; }
   if (flushT) { clearInterval(flushT); flushT = null; }
   if (capT) { clearTimeout(capT); capT = null; }
-  if (recorder && recorder.state !== 'inactive') { recorder.__discard = discard; recorder.stop(); }
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
 }
 async function finish() {
   if (done) return; done = true;
-  const discard = recorder && recorder.__discard; recorder = null; if (stopCopy) { stopCopy(); stopCopy = null; } refresh();
-  if (discard) { if (sessionPath) { forgetMine(sessionPath); deleteByName(sessionPath); } return; }   // toggled off → drop what streamed
-  await flush();                                       // final save
+  recorder = null; if (stopCopy) { stopCopy(); stopCopy = null; } refresh();
+  if (flushP) { try { await flushP; } catch (e) {} }   // let any in-flight save land before we decide
+  if (discarding) { if (sessionPath) { forgetMine(sessionPath); deleteByName(sessionPath); } chunks = []; return; }
+  await flush(true);                                   // final save — not blocked, not size-gated
+  chunks = [];                                         // release the buffered clip once the take is done
 }
 
 // ---- enlarge lightbox + delete confirm (shared by the overlay gallery) ----

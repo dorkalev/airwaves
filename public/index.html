@@ -305,6 +305,12 @@ async function loadGallery(full) {
     if (!items.length && !cards.size) { grid.innerHTML = '<div class="gempty">no sessions yet — play a version to add one</div>'; return; }
     const incoming = items.filter(s => !cards.has(s.name));
     for (const s of incoming.reverse()) { const el = makeCard(s); cards.set(s.name, el); grid.prepend(el); }  // reverse → keeps newest at top
+    // prune cards deleted elsewhere: within the polled window (names newer than the
+    // oldest fetched), anything we hold but didn't get back is gone → drop it
+    if (items.length) {
+      const live = new Set(items.map(s => s.name)), oldest = items[items.length - 1].name;
+      for (const [name, el] of cards) { if (!live.has(name) && name < oldest) { el.remove(); cards.delete(name); } }
+    }
     requestAnimationFrame(sizeGallery);
   } catch (e) { if (!cards.size) { console.error(e); grid.innerHTML = '<div class="gempty">gallery unavailable — on localhost this needs the App Check debug token registered</div>'; } }
 }
