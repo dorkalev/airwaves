@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/site.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>AIRWAVES — play music with your bare hands</title>
@@ -60,10 +61,10 @@
   <div>
     <div class="title">AIR<span class="zap">WAVES</span></div>
     <div class="tag">A FINGER-TAP PIANO IN THE AIR</div>
-    <p class="sub">It's laid out like a keyboard: <b>low notes on the left half</b> of the screen, <b>high on the right</b>.
-      Put a hand on each side — left plays <b>Do Re Mi Fa</b>, right plays <b>Sol La Si Do</b>, ascending left→right.
-      To sound a note, <b>drop that finger down to your thumb's line</b>; <b>open your whole hand to stop</b> — the thumb is just the line.
-      Hand tracking runs <b>100% on-device</b> (MediaPipe + WebGPU); synth is pure Web Audio.</p>
+    <p class="sub">Drop a finger down to your <b>thumb's line</b> to sound its note (lift it to stop) — the thumb is just the line, it plays nothing.
+      <b>Right hand:</b> index→<b>Do</b>, middle→<b>Re</b>, ring→<b>Mi</b>, pinky→<b>Fa</b>.
+      <b>Left hand:</b> <b>Sol · La · Si · Do</b>. Together that's a full octave — tap out a melody,
+      or hold two hands for harmony. Hand tracking runs <b>100% on-device</b> (MediaPipe + WebGPU); synth is pure Web Audio.</p>
     <button class="btn" id="start">START ▸</button>
     <div class="privacy">on-device hand tracking · MediaPipe + WebGPU · nothing uploaded</div>
   </div>
@@ -89,7 +90,6 @@ const NOTES = [
   { n:'Sol', f:392.00 }, { n:'La', f:440.00 }, { n:'Si', f:493.88 }, { n:'Do', f:523.25 },
 ];
 const FINGER_TIPS = [8, 12, 16, 20];   // index, middle, ring, pinky
-const FINGER_MCP  = [5, 9, 13, 17];    // their base knuckles (for open-hand detection)
 const HAND_COLORS = ['#29f4ff', '#ff2e88'];
 let octave = 0, swap = false;
 
@@ -205,43 +205,27 @@ function processHands(hands, handed) {
   // coast slots that dropped this frame; retire ones gone too long
   for (let s = 0; s < 2; s++) if (tracked[s] && !used[s]) { if (++tracked[s].missing <= COAST) used[s] = true; else tracked[s] = null; }
 
-  // keyboard layout: tetrachord by SCREEN SIDE (low=left, high=right), split at center
+  // stable tetrachord per present hand (label locked at birth; swap applies live)
   const present = [0, 1].filter(s => tracked[s] && used[s]);
-  const cx = {};
-  present.forEach(s => { const sm = tracked[s].sm; let ax = 0; for (const i of [0, 5, 9, 13, 17]) ax += sm[i].x; cx[s] = 1 - ax / 5; });   // screen-x of the hand
-  const baseOf = {};
-  if (present.length === 2) {
-    const ord = present.slice().sort((p, q) => cx[p] - cx[q]);   // leftmost hand → lower half
-    baseOf[ord[0]] = 0; baseOf[ord[1]] = 4;
-  } else if (present.length === 1) {
-    baseOf[present[0]] = cx[present[0]] < 0.5 ? 0 : 4;
-  }
-  if (swap) present.forEach(s => baseOf[s] = baseOf[s] === 0 ? 4 : 0);
+  const role = {};
+  present.forEach(s => { let low = tracked[s].label === 'Right'; if (swap) low = !low; role[s] = low; });
+  if (present.length === 2 && role[present[0]] === role[present[1]]) role[present[1]] = !role[present[0]];
 
-  // contact → sustained notes; within a hand, fingers map left→right ascending
+  // contact → sustained notes (on smoothed landmarks)
   const seen = new Array(8).fill(false);
   drawHands = [];
   present.forEach(s => {
-    const lm = tracked[s].sm, base = baseOf[s], thumb = lm[4];
+    const lm = tracked[s].sm, base = role[s] ? 0 : 4, thumb = lm[4];
     const handScale = dist(lm[0], lm[9]) || 0.2;
-    // open hand = all fingers extended (tip far from its knuckle) → stop playing
-    let extended = 0;
-    for (let f = 0; f < 4; f++) if (dist(lm[FINGER_TIPS[f]], lm[FINGER_MCP[f]]) / handScale > 0.78) extended++;
-    const openHand = extended >= 4;
-    // rank the 4 fingertips by screen-x → leftmost finger = lowest note
-    const order = FINGER_TIPS.map((ti, f) => ({ f, x: 1 - lm[ti].x })).sort((p, q) => p.x - q.x);
-    const fingerVoice = [0, 0, 0, 0];
-    order.forEach((o, rank) => { fingerVoice[o.f] = base + rank; });
     for (let f = 0; f < 4; f++) {
-      const vi = fingerVoice[f]; seen[vi] = true;
-      if (openHand) { if (on[vi]) { on[vi] = false; noteOff(vi); } offCount[vi] = 0; continue; }  // open palm = silence
+      const vi = base + f; seen[vi] = true;
       // play when the fingertip is on the thumb's horizontal line (same Y)
       const dy = Math.abs(lm[FINGER_TIPS[f]].y - thumb.y) / handScale;
       if (!on[vi]) { if (dy < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; } }
       else if (dy > OFF_T) { if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); } }
       else offCount[vi] = 0;
     }
-    drawHands.push({ lm, color: HAND_COLORS[base === 0 ? 0 : 1], fingerVoice, open: openHand });
+    drawHands.push({ lm, base, color: HAND_COLORS[role[s] ? 0 : 1] });
   });
   for (let i = 0; i < 8; i++) if (!seen[i] && on[i]) { on[i] = false; noteOff(i); }
   presentCount = present.length;
@@ -253,29 +237,16 @@ function draw() {
   try { ctx.drawImage(video, 0, 0, W, H); } catch {}
   ctx.restore();
 
-  // keyboard split: low half on the left, high half on the right
-  ctx.save();
-  ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.14; ctx.lineWidth = 1.5 * DPR; ctx.setLineDash([10 * DPR, 12 * DPR]);
-  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);
-  ctx.globalAlpha = 0.45; ctx.fillStyle = '#9aa'; ctx.font = `${15 * DPR}px 'Fragment Mono', monospace`; ctx.textAlign = 'center';
-  ctx.fillText('DO · RE · MI · FA', W * 0.25, 34 * DPR);
-  ctx.fillText('SOL · LA · SI · DO', W * 0.75, 34 * DPR);
-  ctx.restore();
-
   for (const hnd of drawHands) {
-    const { lm, color, fingerVoice, open } = hnd;
+    const { lm, base, color } = hnd;
     const thumb = lm[4], ty = thumb.y * H;
     // the "note line": a horizontal guide at the thumb's height across the hand
     let minx = 1, maxx = 0; for (const p of lm) { const sx = 1 - p.x; if (sx < minx) minx = sx; if (sx > maxx) maxx = sx; }
-    ctx.strokeStyle = open ? '#66707e' : color; ctx.globalAlpha = open ? 0.15 : 0.35; ctx.lineWidth = 2 * DPR; ctx.setLineDash([7 * DPR, 7 * DPR]);
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.35; ctx.lineWidth = 2 * DPR; ctx.setLineDash([7 * DPR, 7 * DPR]);
     ctx.beginPath(); ctx.moveTo((minx - 0.03) * W, ty); ctx.lineTo((maxx + 0.03) * W, ty); ctx.stroke(); ctx.setLineDash([]);
-    ctx.globalAlpha = 0.75; ctx.fillStyle = open ? '#66707e' : color; ctx.beginPath(); ctx.arc((1 - thumb.x) * W, ty, 5 * DPR, 0, 7); ctx.fill();
-    if (open) {   // open palm = muted
-      const wx = (1 - lm[0].x) * W, wy = lm[0].y * H;
-      ctx.globalAlpha = 0.7; ctx.font = `${26 * DPR}px serif`; ctx.textAlign = 'center'; ctx.fillText('✋', wx, wy + 40 * DPR);
-    }
+    ctx.globalAlpha = 0.75; ctx.fillStyle = color; ctx.beginPath(); ctx.arc((1 - thumb.x) * W, ty, 5 * DPR, 0, 7); ctx.fill();
     for (let f = 0; f < 4; f++) {
-      const vi = fingerVoice[f], tip = lm[FINGER_TIPS[f]];
+      const vi = base + f, tip = lm[FINGER_TIPS[f]];
       const px = (1 - tip.x) * W, py = tip.y * H;
       if (flash[vi] > 0) flash[vi] = Math.max(0, flash[vi] - 0.06);
       const fl = Math.max(flash[vi], on[vi] ? 0.55 : 0);   // steady glow while the note is held

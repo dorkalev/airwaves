@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/site.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>AIRWAVES — air looper</title>
@@ -67,7 +68,7 @@ const NPADS = 4, PAD_COL = ['#29f4ff', '#ff2e88', '#b6ff2e', '#b16eff'];
 let GX = 0, GY = 0, GW = 0, GH = 0, CW = 0;
 function layout() {
   W = cv.width = innerWidth*DPR; H = cv.height = innerHeight*DPR; cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
-  GW = Math.min(W * 0.86, H * 2.6); GH = Math.min(H * 0.34, GW * 0.28); CW = GW / NPADS; GX = (W - GW) / 2; GY = Math.max(64 * DPR, H * 0.05);   // pads at the top
+  GW = Math.min(W * 0.86, H * 2.6); GH = Math.min(H * 0.34, GW * 0.28); CW = GW / NPADS; GX = (W - GW) / 2; GY = H * 0.5 - GH / 2;
 }
 addEventListener('resize', layout); layout();
 function padRect(i) { return { x: GX + i*CW, y: GY, w: CW, h: GH }; }

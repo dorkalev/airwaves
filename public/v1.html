@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="/site.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>AIRWAVES — play music with your bare hands</title>
@@ -50,7 +51,6 @@
 
 <div id="hud"><div id="status">ready</div></div>
 <div class="toolbar" style="display:none" id="toolbar">
-  <button class="tool" id="sensBtn">band: level</button>
   <button class="tool" id="swapBtn">swap hands</button>
   <button class="tool" id="waveBtn">tone: glass</button>
   <button class="tool" id="octBtn">octave: 0</button>
@@ -60,10 +60,10 @@
   <div>
     <div class="title">AIR<span class="zap">WAVES</span></div>
     <div class="tag">A FINGER-TAP PIANO IN THE AIR</div>
-    <p class="sub">It's laid out like a keyboard: <b>low notes on the left half</b> of the screen, <b>high on the right</b>.
-      Put a hand on each side — left plays <b>Do Re Mi Fa</b>, right plays <b>Sol La Si Do</b>, ascending left→right.
-      To sound a note, <b>drop that finger down to your thumb's line</b> (lift it to stop) — the thumb is just the line.
-      Hand tracking runs <b>100% on-device</b> (MediaPipe + WebGPU); synth is pure Web Audio.</p>
+    <p class="sub">Touch your <b>thumb to a finger</b> to play a note.
+      <b>Right hand:</b> index→<b>Do</b>, middle→<b>Re</b>, ring→<b>Mi</b>, pinky→<b>Fa</b>.
+      <b>Left hand:</b> <b>Sol · La · Si · Do</b>. Together that's a full octave — tap out a melody,
+      or hold two hands for harmony. Hand tracking runs <b>100% on-device</b> (MediaPipe + WebGPU); synth is pure Web Audio.</p>
     <button class="btn" id="start">START ▸</button>
     <div class="privacy">on-device hand tracking · MediaPipe + WebGPU · nothing uploaded</div>
   </div>
@@ -114,20 +114,16 @@ function initAudio() {
   }
 }
 function setWave() { voices.forEach(v => v.osc.type = WAVES[waveName]); }
-function noteOn(i) {
+function pluck(i) {
   const v = voices[i], now = AC.currentTime;
   v.osc.frequency.setValueAtTime(NOTES[i].f * Math.pow(2, octave), now);
   v.g.gain.cancelScheduledValues(now);
-  v.g.gain.setValueAtTime(Math.max(0.0001, v.g.gain.value), now);
-  v.g.gain.linearRampToValueAtTime(0.4, now + 0.02);             // attack → sustain
+  v.g.gain.setValueAtTime(0.0001, now);
+  v.g.gain.exponentialRampToValueAtTime(0.55, now + 0.008);      // attack
+  v.g.gain.exponentialRampToValueAtTime(0.0008, now + 1.5);      // decay
   v.filt.frequency.cancelScheduledValues(now);
-  v.filt.frequency.setTargetAtTime(2600, now, 0.05);
-}
-function noteOff(i) {
-  const v = voices[i], now = AC.currentTime;
-  v.g.gain.cancelScheduledValues(now);
-  v.g.gain.setValueAtTime(Math.max(0.0001, v.g.gain.value), now);
-  v.g.gain.setTargetAtTime(0.0001, now, 0.11);                   // smooth release
+  v.filt.frequency.setValueAtTime(4200, now);
+  v.filt.frequency.exponentialRampToValueAtTime(700, now + 1.2);
 }
 
 // ---- MediaPipe hands ----
@@ -147,128 +143,69 @@ async function startCamera() {
 
 // ---- loop ----
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const on = new Array(8).fill(false);          // is each voice currently sounding
-const offCount = new Array(8).fill(0);        // consecutive "released" frames (debounce)
-const flash = new Array(8).fill(0);           // viz attack flash
-// contact thresholds (thumb↔fingertip distance ÷ hand size); generous by default
-// a finger plays when its tip is level (same Y) with the thumb; thumb = the line
-const SENS = { level: { on: 0.22, off: 0.40 }, tight: { on: 0.14, off: 0.28 }, wide: { on: 0.32, off: 0.55 } };
-const SENS_ORDER = ['level', 'tight', 'wide'];
-let sens = 'level', ON_T = SENS.level.on, OFF_T = SENS.level.off;
-const REL_FRAMES = 3;                              // frames of clear separation before a note stops
+const pressed = new Array(8).fill(false);     // rising-edge state per voice
+const flash = new Array(8).fill(0);           // viz flash timer
 let running = false, lastVideoTime = -1;
-let drawHands = [], presentCount = 0;
-// persistent per-hand state so tracking carries frame→frame (no blind recompute)
-const tracked = [null, null];     // slot = { sm:[{x,y,z}×21], label, missing }
-const SM = 0.55;                  // landmark smoothing (EMA toward the new frame)
-const COAST = 6;                  // keep a hand alive this many frames after it drops
-const MATCH_D = 0.30;             // wrist-distance to match a detection to a slot
+let drawHands = [];   // [{lm, base, color}]
 
 function loop() {
   if (!running) return;
   requestAnimationFrame(loop);
-  // only touch tracking/notes when the CAMERA produced a new frame; otherwise
-  // coast on the last state (the render loop is faster than the camera)
+  let hands = [], handed = [];
   if (handLandmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
-    let hands = [], handed = [];
     try { const r = handLandmarker.detectForVideo(video, performance.now()); hands = r.landmarks || []; handed = r.handedness || []; } catch {}
-    processHands(hands, handed);
   }
-  draw();
-}
-
-// match detections to persistent slots, smooth them, coast dropouts, play notes
-function processHands(hands, handed) {
-  const used = [false, false], assign = new Array(hands.length).fill(-1);
-  // pass 1: match each detection to the nearest existing slot (by wrist)
-  hands.forEach((lm, h) => {
-    let s = -1, bd = MATCH_D;
-    for (let k = 0; k < 2; k++) if (tracked[k] && !used[k]) { const d = dist(tracked[k].sm[0], lm[0]); if (d < bd) { bd = d; s = k; } }
-    if (s >= 0) { used[s] = true; assign[h] = s; }
-  });
-  // pass 2: unmatched detections → a free slot (a hand that just appeared)
-  hands.forEach((lm, h) => {
-    if (assign[h] >= 0) return;
-    let s = -1; for (let k = 0; k < 2; k++) if (!used[k]) { s = k; break; }
-    if (s < 0) return;
-    tracked[s] = { sm: lm.map(p => ({ x:p.x, y:p.y, z:p.z })), label: handed[h]?.[0]?.[0]?.categoryName || handed[h]?.[0]?.categoryName || 'Right', missing: 0 };
-    used[s] = true; assign[h] = s;
-  });
-  // smooth matched slots toward the new landmarks
-  hands.forEach((lm, h) => {
-    const s = assign[h]; if (s < 0) return; const t = tracked[s];
-    for (let i = 0; i < lm.length; i++) { t.sm[i].x += (lm[i].x - t.sm[i].x) * SM; t.sm[i].y += (lm[i].y - t.sm[i].y) * SM; t.sm[i].z += (lm[i].z - t.sm[i].z) * SM; }
-    t.missing = 0;
-  });
-  // coast slots that dropped this frame; retire ones gone too long
-  for (let s = 0; s < 2; s++) if (tracked[s] && !used[s]) { if (++tracked[s].missing <= COAST) used[s] = true; else tracked[s] = null; }
-
-  // keyboard layout: tetrachord by SCREEN SIDE (low=left, high=right), split at center
-  const present = [0, 1].filter(s => tracked[s] && used[s]);
-  const cx = {};
-  present.forEach(s => { const sm = tracked[s].sm; let ax = 0; for (const i of [0, 5, 9, 13, 17]) ax += sm[i].x; cx[s] = 1 - ax / 5; });   // screen-x of the hand
-  const baseOf = {};
-  if (present.length === 2) {
-    const ord = present.slice().sort((p, q) => cx[p] - cx[q]);   // leftmost hand → lower half
-    baseOf[ord[0]] = 0; baseOf[ord[1]] = 4;
-  } else if (present.length === 1) {
-    baseOf[present[0]] = cx[present[0]] < 0.5 ? 0 : 4;
-  }
-  if (swap) present.forEach(s => baseOf[s] = baseOf[s] === 0 ? 4 : 0);
-
-  // contact → sustained notes; within a hand, fingers map left→right ascending
-  const seen = new Array(8).fill(false);
   drawHands = [];
-  present.forEach(s => {
-    const lm = tracked[s].sm, base = baseOf[s], thumb = lm[4];
-    const handScale = dist(lm[0], lm[9]) || 0.2;
-    // rank the 4 fingertips by screen-x → leftmost finger = lowest note
-    const order = FINGER_TIPS.map((ti, f) => ({ f, x: 1 - lm[ti].x })).sort((p, q) => p.x - q.x);
-    const fingerVoice = [0, 0, 0, 0];
-    order.forEach((o, rank) => { fingerVoice[o.f] = base + rank; });
+  const seen = new Array(8).fill(false);   // which voices had their hand present this frame
+  let lowerTaken = false, upperTaken = false;
+
+  hands.forEach((lm, h) => {
+    // decide tetrachord: MediaPipe handedness ('Right'→lower), with a swap fallback
+    let label = handed[h]?.[0]?.categoryName || (h === 0 ? 'Right' : 'Left');
+    let isLower = (label === 'Right');
+    if (swap) isLower = !isLower;
+    // avoid both hands grabbing the same tetrachord
+    if (isLower && lowerTaken) isLower = false; if (!isLower && upperTaken) isLower = true;
+    if (isLower) lowerTaken = true; else upperTaken = true;
+    const base = isLower ? 0 : 4;
+
+    const thumb = lm[4];
+    const handScale = dist(lm[0], lm[9]) || 0.2;    // wrist → middle-MCP, for distance-invariance
     for (let f = 0; f < 4; f++) {
-      const vi = fingerVoice[f]; seen[vi] = true;
-      // play when the fingertip is on the thumb's horizontal line (same Y)
-      const dy = Math.abs(lm[FINGER_TIPS[f]].y - thumb.y) / handScale;
-      if (!on[vi]) { if (dy < ON_T) { on[vi] = true; offCount[vi] = 0; noteOn(vi); flash[vi] = 1; } }
-      else if (dy > OFF_T) { if (++offCount[vi] >= REL_FRAMES) { on[vi] = false; noteOff(vi); } }
-      else offCount[vi] = 0;
+      const vi = base + f;
+      seen[vi] = true;
+      const d = dist(thumb, lm[FINGER_TIPS[f]]) / handScale;
+      const on = d < 0.42, off = d > 0.62;
+      if (on && !pressed[vi]) { pressed[vi] = true; pluck(vi); flash[vi] = 1; }
+      else if (off && pressed[vi]) { pressed[vi] = false; }
     }
-    drawHands.push({ lm, color: HAND_COLORS[base === 0 ? 0 : 1], fingerVoice });
+    drawHands.push({ lm, base, color: HAND_COLORS[isLower ? 0 : 1] });
   });
-  for (let i = 0; i < 8; i++) if (!seen[i] && on[i]) { on[i] = false; noteOff(i); }
-  presentCount = present.length;
+
+  // release voices whose hand vanished
+  for (let i = 0; i < 8; i++) if (!seen[i]) pressed[i] = false;
+  draw(hands.length);
 }
 
-function draw() {
+function draw(nHands) {
   ctx.clearRect(0, 0, W, H);
   ctx.save(); ctx.globalAlpha = 0.26; ctx.translate(W, 0); ctx.scale(-1, 1);
   try { ctx.drawImage(video, 0, 0, W, H); } catch {}
   ctx.restore();
 
-  // keyboard split: low half on the left, high half on the right
-  ctx.save();
-  ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.14; ctx.lineWidth = 1.5 * DPR; ctx.setLineDash([10 * DPR, 12 * DPR]);
-  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);
-  ctx.globalAlpha = 0.45; ctx.fillStyle = '#9aa'; ctx.font = `${15 * DPR}px 'Fragment Mono', monospace`; ctx.textAlign = 'center';
-  ctx.fillText('DO · RE · MI · FA', W * 0.25, 34 * DPR);
-  ctx.fillText('SOL · LA · SI · DO', W * 0.75, 34 * DPR);
-  ctx.restore();
-
   for (const hnd of drawHands) {
-    const { lm, color, fingerVoice } = hnd;
-    const thumb = lm[4], ty = thumb.y * H;
-    // the "note line": a horizontal guide at the thumb's height across the hand
-    let minx = 1, maxx = 0; for (const p of lm) { const sx = 1 - p.x; if (sx < minx) minx = sx; if (sx > maxx) maxx = sx; }
-    ctx.strokeStyle = color; ctx.globalAlpha = 0.35; ctx.lineWidth = 2 * DPR; ctx.setLineDash([7 * DPR, 7 * DPR]);
-    ctx.beginPath(); ctx.moveTo((minx - 0.03) * W, ty); ctx.lineTo((maxx + 0.03) * W, ty); ctx.stroke(); ctx.setLineDash([]);
-    ctx.globalAlpha = 0.75; ctx.fillStyle = color; ctx.beginPath(); ctx.arc((1 - thumb.x) * W, ty, 5 * DPR, 0, 7); ctx.fill();
+    const { lm, base, color } = hnd;
+    const thumb = lm[4], tx = (1 - thumb.x) * W, ty = thumb.y * H;
+    // thumb dot
+    ctx.fillStyle = color; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(tx, ty, 8 * DPR, 0, 7); ctx.fill();
     for (let f = 0; f < 4; f++) {
-      const vi = fingerVoice[f], tip = lm[FINGER_TIPS[f]];
+      const vi = base + f, tip = lm[FINGER_TIPS[f]];
       const px = (1 - tip.x) * W, py = tip.y * H;
-      if (flash[vi] > 0) flash[vi] = Math.max(0, flash[vi] - 0.06);
-      const fl = Math.max(flash[vi], on[vi] ? 0.55 : 0);   // steady glow while the note is held
+      const fl = flash[vi]; if (fl > 0) flash[vi] = Math.max(0, fl - 0.06);
+      // line thumb → fingertip
+      ctx.globalAlpha = 0.25 + fl * 0.5; ctx.strokeStyle = color; ctx.lineWidth = (1.5 + fl * 5) * DPR;
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(px, py); ctx.stroke();
       // note orb
       const R = (12 + fl * 26) * DPR;
       const grd = ctx.createRadialGradient(px, py, 0, px, py, R);
@@ -281,7 +218,7 @@ function draw() {
     }
   }
   ctx.globalAlpha = 1;
-  if (presentCount === 0) setStatus('raise a hand ✋ — drop a finger to the thumb line', 'warn');
+  if (nHands === 0) setStatus('raise a hand ✋ — tap thumb to a finger', 'warn');
   else if ($('status').textContent !== 'playing 🎶') setStatus('playing 🎶');
 }
 
@@ -295,14 +232,13 @@ async function engage() {
     setStatus('starting… <span class="loader"></span>', 'warn');
     initAudio(); await AC.resume();
     await Promise.all([startCamera(), initHands()]);
-    running = true; setStatus('raise a hand ✋ — drop a finger to the thumb line', 'warn'); loop();
+    running = true; setStatus('raise a hand ✋ — tap thumb to a finger', 'warn'); loop();
   } catch (e) {
     console.error(e); engaged = false; $('boot').classList.remove('gone');
     setStatus('camera/model failed: ' + (e.name || e.message), 'err');
   }
 }
 $('start').onclick = engage;
-$('sensBtn').onclick = () => { sens = SENS_ORDER[(SENS_ORDER.indexOf(sens) + 1) % SENS_ORDER.length]; ON_T = SENS[sens].on; OFF_T = SENS[sens].off; $('sensBtn').textContent = 'band: ' + sens; };
 $('swapBtn').onclick = () => { swap = !swap; $('swapBtn').textContent = swap ? 'swap hands ✓' : 'swap hands'; };
 $('waveBtn').onclick = () => { waveName = WAVE_ORDER[(WAVE_ORDER.indexOf(waveName) + 1) % WAVE_ORDER.length]; setWave(); $('waveBtn').textContent = 'tone: ' + waveName; };
 $('octBtn').onclick = () => { octave = octave >= 1 ? -1 : octave + 1; $('octBtn').textContent = 'octave: ' + (octave > 0 ? '+' : '') + octave; };

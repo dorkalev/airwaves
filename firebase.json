@@ -2,11 +2,8 @@
   "hosting": {
     "site": "airwaves-dorkalev",
     "public": "public",
+    "cleanUrls": true,
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      { "source": "/admin", "destination": "/admin.html" },
-      { "source": "/versions", "destination": "/versions.html" }
-    ],
     "headers": [
       {
         "source": "**/*.@(html|js|mjs)",

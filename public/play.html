@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/site.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AIRWAVES — air looper</title>
+<meta name="description" content="An air looper: pinch to record your voice or guitar, pinch to loop it, pinch to clear. Four independent loops, controlled by hand. On-device hand tracking (MediaPipe + WebGPU).">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%94%81%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#0a0a12">
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fragment+Mono&display=swap" rel="stylesheet">
+<style>
+  :root { --hot:#ff2e88; --cyan:#29f4ff; --lime:#b6ff2e; --violet:#b16eff; --amber:#ffb02e; --bg:#0a0a12; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; background:var(--bg); color:#fff; font-family:'Fragment Mono', monospace; }
+  #view { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #cam { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
+  .overlay { position:fixed; inset:0; z-index:20; display:grid; place-content:safe center; justify-items:center; text-align:center; padding:24px; overflow:auto; background:radial-gradient(ellipse at 50% 40%, #0a0a1288 0%, #0a0a12ee 75%); backdrop-filter:blur(6px); transition:opacity .35s; }
+  .overlay.gone { opacity:0; pointer-events:none; }
+  .title { font-family:'Bangers', cursive; font-size:clamp(58px,12vw,140px); line-height:.9; text-shadow:4px 4px 0 var(--hot), 8px 8px 0 #7a0b3d; }
+  .title .zap { color:var(--violet); text-shadow:4px 4px 0 var(--cyan), 8px 8px 0 #0b4a7a; }
+  .tag { font-family:'Bangers', cursive; font-size:clamp(20px,4.5vw,34px); color:var(--cyan); text-shadow:2px 2px 0 #0b4a7a; transform:rotate(-1deg); margin-top:6px; }
+  .sub { max-width:600px; margin:20px auto 0; font-size:15px; line-height:1.8; color:#c7c7d5; } .sub b { color:#fff; }
+  .warn2 { color:var(--amber); }
+  .btn { font-family:'Bangers', cursive; font-size:28px; color:#0a0a12; background:var(--lime); border:none; border-radius:14px; padding:15px 40px; cursor:pointer; box-shadow:0 6px 0 #5c8a0e, 0 0 50px #b6ff2e44; transform:rotate(-1deg); margin-top:26px; }
+  .btn:active { transform:rotate(-1deg) translateY(4px); box-shadow:0 2px 0 #5c8a0e; }
+  .privacy { margin-top:22px; font-size:10px; color:#667; letter-spacing:.06em; } .privacy b { color:#9aa; font-weight:400; }
+  #hud { position:fixed; top:12px; left:0; right:0; z-index:6; display:flex; justify-content:center; pointer-events:none; }
+  #status { font-size:12px; letter-spacing:.06em; color:#9aa; background:#12121ecc; padding:7px 14px; border-radius:20px; border:1px solid #ffffff14; }
+  #status.warn { color:#ffd24f; border-color:#ffd24f44; } #status.err { color:var(--hot); border-color:#ff2e8844; }
+  .toolbar { position:fixed; top:12px; right:12px; z-index:7; }
+  .tool { pointer-events:auto; font-size:12px; color:#cfe; background:#12121ecc; border:1px solid #ffffff1c; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  .tool:hover { border-color:#ffffff44; color:#fff; }
+  .footer { position:fixed; bottom:8px; left:0; right:0; z-index:6; text-align:center; font-size:11px; color:#667; }
+  .footer a { color:var(--cyan); text-decoration:none; }
+  .loader { display:inline-block; width:14px; height:14px; border:2px solid #ffffff33; border-top-color:var(--cyan); border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<video id="cam" playsinline muted></video>
+<div id="hud"><div id="status">ready</div></div>
+<div class="toolbar" style="display:none" id="toolbar"><button class="tool" id="clearBtn">clear all</button></div>
+<div class="overlay" id="boot">
+  <div>
+    <div class="title">AIR<span class="zap">LOOPER</span></div>
+    <div class="tag">LOOP REAL SOUND, WITH YOUR HANDS</div>
+    <p class="sub">Layer your own <b>voice or guitar</b> — no buttons, no timing.
+      Hover a hand over a pad and <b>pinch</b> (thumb + finger): first pinch <b>starts recording</b>,
+      next pinch <b>stops &amp; loops</b> it, one more <b>clears</b> it. Four independent loops — stack a beatbox,
+      a bassline, a riff.<br><span class="warn2">🎧 Use headphones</span> or the mic will re-record the loops. Hand tracking is <b>100% on-device</b>.</p>
+    <button class="btn" id="start">START ▸</button>
+    <div class="privacy">camera + mic used locally · nothing uploaded</div>
+  </div>
+</div>
+<div class="footer">a sibling of <a href="https://airslice.dorkalev.com" target="_blank" rel="noopener">AIRSLICE</a> · by <a href="https://dorkalev.com" target="_blank" rel="noopener">Dor Kalev</a> · hands by <a href="https://ai.google.dev/edge/mediapipe" target="_blank" rel="noopener">MediaPipe</a> · <a href="https://github.com/dorkalev/airwaves" target="_blank" rel="noopener">source ↗</a></div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const HAND_TASK = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
+const setStatus = (t, c='') => { const s=$('status'); s.className=c; s.innerHTML=t; };
+const cv = $('view'), ctx = cv.getContext('2d'), video = $('cam');
+let W = 0, H = 0, DPR = Math.min(devicePixelRatio, 2);
+
+const NPADS = 4, PAD_COL = ['#29f4ff', '#ff2e88', '#b6ff2e', '#b16eff'];
+let GX = 0, GY = 0, GW = 0, GH = 0, CW = 0;
+function layout() {
+  W = cv.width = innerWidth*DPR; H = cv.height = innerHeight*DPR; cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
+  GW = Math.min(W * 0.86, H * 2.6); GH = Math.min(H * 0.34, GW * 0.28); CW = GW / NPADS; GX = (W - GW) / 2; GY = Math.max(64 * DPR, H * 0.05);   // pads at the top
+}
+addEventListener('resize', layout); layout();
+function padRect(i) { return { x: GX + i*CW, y: GY, w: CW, h: GH }; }
+function padAt(px, py) { if (px < GX || px > GX+GW || py < GY || py > GY+GH) return -1; return Math.min(NPADS-1, Math.floor((px-GX)/CW)); }
+
+// ---- dead-simple looper: pinch cycles empty → recording → looping → empty ----
+let AC = null, node = null, micStream = null, sr = 44100;
+const MAX_SEC = 20;
+const pads = Array.from({ length: NPADS }, () => ({ state: 'empty', buf: null, wi: 0, len: 0, pp: 0 }));
+const level = new Float32Array(NPADS);
+
+function pressPad(i) {
+  const p = pads[i];
+  if (p.state === 'empty') { if (!p.buf) p.buf = new Float32Array(Math.floor(MAX_SEC * sr)); p.wi = 0; p.state = 'rec'; }
+  else if (p.state === 'rec') { p.len = p.wi; p.pp = 0; p.state = p.len > sr * 0.05 ? 'play' : 'empty'; }   // stop → loop (ignore ultra-short)
+  else { p.state = 'empty'; p.len = 0; }                                                                     // clear
+}
+
+function initAudio() {
+  AC = new (window.AudioContext || window.webkitAudioContext)(); sr = AC.sampleRate;
+  const source = AC.createMediaStreamSource(micStream);
+  node = AC.createScriptProcessor(2048, 1, 1);
+  source.connect(node); node.connect(AC.destination);
+  node.onaudioprocess = (e) => {
+    const inp = e.inputBuffer.getChannelData(0), out = e.outputBuffer.getChannelData(0);
+    const lvl = new Float32Array(NPADS);
+    for (let j = 0; j < inp.length; j++) {
+      let s = 0;
+      for (let pi = 0; pi < NPADS; pi++) {
+        const p = pads[pi];
+        if (p.state === 'rec') { if (p.wi < p.buf.length) p.buf[p.wi++] = inp[j]; }
+        else if (p.state === 'play' && p.len > 0) { const v = p.buf[p.pp]; s += v; if (Math.abs(v) > lvl[pi]) lvl[pi] = Math.abs(v); p.pp = (p.pp + 1) % p.len; }
+      }
+      out[j] = Math.max(-1, Math.min(1, s));
+    }
+    for (let pi = 0; pi < NPADS; pi++) level[pi] = level[pi]*0.6 + lvl[pi]*0.4;
+  };
+}
+
+// ---- MediaPipe hands + smoothed tracking ----
+let handLandmarker = null;
+async function initHands() {
+  const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs');
+  const fileset = await vision.FilesetResolver.forVisionTasks(WASM_BASE);
+  handLandmarker = await vision.HandLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: HAND_TASK, delegate: 'GPU' }, runningMode: 'VIDEO', numHands: 2 });
+}
+async function startMedia() {
+  micStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'user', width:960, height:720 }, audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+  video.srcObject = micStream; await video.play();
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const tracked = [null, null]; const SM = 0.5, COAST = 6, MATCH_D = 0.30;
+function updateTracking(hands) {
+  const used=[false,false], assign=new Array(hands.length).fill(-1);
+  hands.forEach((lm,h)=>{let s=-1,bd=MATCH_D;for(let k=0;k<2;k++)if(tracked[k]&&!used[k]){const d=dist(tracked[k].sm[0],lm[0]);if(d<bd){bd=d;s=k;}}if(s>=0){used[s]=true;assign[h]=s;}});
+  hands.forEach((lm,h)=>{if(assign[h]>=0)return;let s=-1;for(let k=0;k<2;k++)if(!used[k]){s=k;break;}if(s<0)return;tracked[s]={sm:lm.map(p=>({x:p.x,y:p.y})),missing:0,pinched:false,cool:0};used[s]=true;assign[h]=s;});
+  hands.forEach((lm,h)=>{const s=assign[h];if(s<0)return;const t=tracked[s];for(let i=0;i<lm.length;i++){t.sm[i].x+=(lm[i].x-t.sm[i].x)*SM;t.sm[i].y+=(lm[i].y-t.sm[i].y)*SM;}t.missing=0;});
+  for(let s=0;s<2;s++)if(tracked[s]&&!used[s]){if(++tracked[s].missing<=COAST)used[s]=true;else tracked[s]=null;}
+  return [0,1].filter(s=>tracked[s]&&used[s]);
+}
+function palm(sm){let ax=0,ay=0;for(const i of[0,5,9,13,17]){ax+=sm[i].x;ay+=sm[i].y;}return{x:(1-ax/5)*W,y:(ay/5)*H};}
+
+let pointers = [], running = false, lastVideoTime = -1;
+function processFrame(hands) {
+  const present = updateTracking(hands);
+  pointers = [];
+  present.forEach(s => {
+    const t = tracked[s], p = palm(t.sm);
+    const hs = dist(t.sm[0], t.sm[9]) || 0.2, d = dist(t.sm[4], t.sm[8]) / hs;
+    const pinched = t.pinched ? d < 0.55 : d < 0.38;      // hysteresis
+    const k = padAt(p.x, p.y);
+    if (t.cool > 0) t.cool--;
+    if (pinched && !t.pinched && k >= 0 && t.cool === 0) { pressPad(k); t.cool = 12; }   // down-edge + cooldown
+    t.pinched = pinched;
+    pointers.push({ x: p.x, y: p.y, k, pinched });
+  });
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (vw && vh) { const sc = Math.max(W/vw, H/vh), dw=vw*sc, dh=vh*sc, dx=(W-dw)/2, dy=(H-dh)/2;
+    ctx.save(); ctx.globalAlpha = 0.42; ctx.translate(W,0); ctx.scale(-1,1); try { ctx.drawImage(video, dx, dy, dw, dh); } catch {} ctx.restore(); }
+
+  for (let i = 0; i < NPADS; i++) {
+    const r = padRect(i), p = pads[i], col = PAD_COL[i];
+    let bg='rgba(255,255,255,0.05)', border='rgba(255,255,255,0.28)', label='LOOP '+(i+1), sub='empty · pinch to record', sc2='#aecbd6';
+    if (p.state === 'rec') { const t = p.wi/sr; bg='rgba(255,46,136,0.30)'; border='#ff2e88'; sub='● REC '+t.toFixed(1)+'s · pinch to loop'; sc2='#ff8aa8'; }
+    else if (p.state === 'play') { const m=Math.min(1,level[i]*4); bg=`rgba(41,244,255,${0.10+m*0.5})`; border=col; sub='► loop '+(p.len/sr).toFixed(1)+'s · pinch to clear'; }
+    ctx.fillStyle=bg; ctx.fillRect(r.x+4,r.y+4,r.w-8,r.h-8);
+    ctx.strokeStyle=border; ctx.lineWidth=(p.state==='empty'?1.5:2.5)*DPR; ctx.strokeRect(r.x+4,r.y+4,r.w-8,r.h-8);
+    if (p.state==='play' && p.len>0) { const ph=p.pp/p.len; ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fillRect(r.x+4+(r.w-8)*ph, r.y+4, 2*DPR, r.h-8); }
+    ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.font=`${Math.min(GH*0.26,30*DPR)}px Bangers, cursive`; ctx.fillText(label, r.x+r.w/2, r.y+GH*0.42);
+    ctx.font=`${12*DPR}px 'Fragment Mono', monospace`; ctx.fillStyle=sc2; ctx.fillText(sub, r.x+r.w/2, r.y+GH*0.68);
+  }
+  for (const p of pointers) {
+    ctx.beginPath(); ctx.arc(p.x, p.y, (p.pinched?15:20)*DPR, 0, 7);
+    ctx.fillStyle = p.pinched ? 'rgba(182,255,46,0.9)' : 'rgba(255,255,255,0.28)';
+    ctx.strokeStyle = p.k>=0 ? '#fff' : 'rgba(255,255,255,0.4)'; ctx.lineWidth = 3*DPR; ctx.fill(); ctx.stroke();
+  }
+  const any = pads.some(p => p.state !== 'empty');
+  setStatus(pointers.length ? 'pinch a pad: record → loop → clear' : (any ? 'looping 🔁' : 'raise a hand ✋ over a pad'), pointers.length||any ? '' : 'warn');
+}
+
+function loop() {
+  if (!running) return;
+  requestAnimationFrame(loop);
+  if (handLandmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    let hands = []; try { hands = handLandmarker.detectForVideo(video, performance.now()).landmarks || []; } catch {}
+    processFrame(hands);
+  }
+  draw();
+}
+
+let engaged = false;
+async function engage() {
+  if (engaged) return; engaged = true;
+  $('boot').classList.add('gone'); $('toolbar').style.display = '';
+  const foot = document.querySelector('.footer'); if (foot) foot.style.display = 'none';
+  try {
+    setStatus('starting… <span class="loader"></span>', 'warn');
+    await startMedia(); initAudio(); await AC.resume(); await initHands();
+    running = true; setStatus('raise a hand ✋ over a pad', 'warn'); loop();
+  } catch (e) { console.error(e); engaged = false; $('boot').classList.remove('gone'); setStatus('camera/mic failed: ' + (e.name || e.message), 'err'); }
+}
+$('start').onclick = engage;
+$('clearBtn').onclick = () => pads.forEach(p => { p.state = 'empty'; p.len = 0; });
+window.__airlooper = { get running(){return running;} };
+</script>
+<script type="module" src="/recorder.js?v=2"></script>
+</body>
+</html>

@@ -31,8 +31,8 @@ if (RECORDING_ENABLED) {
 const audioTracks = () => { const t = []; (window.__airCtxs || []).forEach(c => { try { c.__cap.stream.getAudioTracks().forEach(x => t.push(x)); } catch (e) {} }); return t; };
 
 const LS = 'air-rec-consent';
-// which build this clip is from: /versions/v14.html → 'v14'; the live app → 'live'
-const REC_VER = (location.pathname.match(/(v\d+)\.html?$/i) || [])[1] || 'live';
+// which build this clip is from: /v14 (or /v14.html) → 'v14'; anything else → 'live'
+const REC_VER = (location.pathname.match(/\/(v\d+)(?:\.html?)?$/i) || [])[1] || 'live';
 let consent = localStorage.getItem(LS);   // 'on' | 'off' | null
 let recorder = null, chunks = [], done = false, capT = null;
 let sessionPath = null, posterDone = false, flushT = null, flushing = false, stopCopy = null;
