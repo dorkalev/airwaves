@@ -72,9 +72,13 @@ style.textContent = `
   #airToast.show { opacity:1; transform:none; }
   #airToast.err { background:#ff2e88; color:#fff; }
   #airToast .c { display:inline-block; margin-left:6px; opacity:.7; }
-  #airGallery .sc .sv { position:relative; }
-  #airGallery .sc video { filter:brightness(.88); transition:filter .25s ease; }
+  #airGallery .sc .sv { position:relative; background:#0e0e16; }
+  #airGallery .sc .sv::after { content:''; position:absolute; top:50%; left:50%; width:20px; height:20px; margin:-10px 0 0 -10px; border:2px solid #ffffff26; border-top-color:#29f4ff; border-radius:50%; animation:gspin .7s linear infinite; }
+  #airGallery .sc.loaded .sv::after { display:none; }
+  #airGallery .sc video { filter:brightness(.88); opacity:0; transition:opacity .3s ease, filter .25s ease; }
+  #airGallery .sc.loaded video { opacity:1; }
   #airGallery .sc video.live { filter:none; }
+  @keyframes gspin { to { transform:rotate(360deg); } }
   #airGallery .sc .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   #airGallery .sc .mx:hover { border-color:#29f4ff; color:#fff; }
   #airGallery .sc .vb { position:absolute; top:8px; left:8px; font-size:10px; font-weight:bold; color:#0a0a12; background:#b6ff2e; border-radius:6px; padding:2px 6px; font-family:'Fragment Mono',monospace; }
@@ -216,8 +220,12 @@ async function openGallery() {
     for (const s of items) {
       const el = document.createElement('div'); el.className = 'sc';
       el.innerHTML = `<div class="sv"><video playsinline loop muted preload="none"></video><span class="vb">${s.version || '?'}</span><button class="mx" title="enlarge">⛶</button></div><div class="m">${new Date(s.ts).toLocaleString()}</div>`;
-      const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.addEventListener('play', () => { v.classList.add('live'); grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
+      const v = el.querySelector('video');
+      getPosterUrl(s.name).then(u => {
+        if (!u) { el.classList.add('loaded'); return; }
+        const img = new Image(); img.onload = () => { v.poster = u; el.classList.add('loaded'); }; img.onerror = () => el.classList.add('loaded'); img.src = u;
+      }).catch(() => el.classList.add('loaded'));
+      v.addEventListener('play', () => { el.classList.add('loaded'); v.classList.add('live'); grid.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
       v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                  // dim back to the start
       v.onclick = async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } };
       el.querySelector('.mx').onclick = () => airLight(getUrl(s.item).catch(() => null));

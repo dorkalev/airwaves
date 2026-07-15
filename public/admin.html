@@ -24,9 +24,13 @@
   .run .meta { padding:9px 12px; font-size:11px; color:#9aa; }
   .kill { position:absolute; top:8px; right:8px; font-size:11px; color:#ff8aa8; border:1px solid #ff2e8855; border-radius:8px; padding:5px 10px; cursor:pointer; background:#000000cc; }
   .kill:hover { background:#7a0b3d; color:#fff; }
-  .run .rv { position:relative; }
-  .run video { filter:brightness(.88); transition:filter .25s ease; }
+  .run .rv { position:relative; background:#0e0e16; }
+  .run .rv::after { content:''; position:absolute; top:50%; left:50%; width:20px; height:20px; margin:-10px 0 0 -10px; border:2px solid #ffffff26; border-top-color:var(--cyan); border-radius:50%; animation:gspin .7s linear infinite; }
+  .run.loaded .rv::after { display:none; }
+  .run video { filter:brightness(.88); opacity:0; transition:opacity .3s ease, filter .25s ease; }
+  .run.loaded video { opacity:1; }
   .run video.live { filter:none; }
+  @keyframes gspin { to { transform:rotate(360deg); } }
   .run .vb { position:absolute; top:8px; left:8px; z-index:1; font-family:'Fragment Mono', monospace; font-size:10px; font-weight:bold; color:#0a0a12; background:var(--lime); border-radius:6px; padding:2px 6px; }
   .run .mx { position:absolute; bottom:8px; right:8px; font-size:11px; color:#cfe; background:#000000cc; border:1px solid #ffffff33; border-radius:6px; padding:2px 7px; cursor:pointer; }
   .run .mx:hover { border-color:var(--cyan); color:#fff; }
@@ -112,8 +116,12 @@ async function loadAll() {
     for (const s of all) {
       const el = document.createElement('div'); el.className = 'run';
       el.innerHTML = `<div class="rv"><video playsinline loop muted preload="none"></video><span class="vb">${s.version || '?'}</span><button class="mx" title="enlarge">⛶</button></div><div class="meta">${new Date(s.ts).toLocaleString()} · ${s.version || 'unknown'}</div><button class="kill">🗑 delete</button>`;
-      const v = el.querySelector('video'); getPosterUrl(s.name).then(u => { if (u) v.poster = u; });
-      v.addEventListener('play', () => { v.classList.add('live'); board.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
+      const v = el.querySelector('video');
+      getPosterUrl(s.name).then(u => {
+        if (!u) { el.classList.add('loaded'); return; }
+        const img = new Image(); img.onload = () => { v.poster = u; el.classList.add('loaded'); }; img.onerror = () => el.classList.add('loaded'); img.src = u;
+      }).catch(() => el.classList.add('loaded'));
+      v.addEventListener('play', () => { el.classList.add('loaded'); v.classList.add('live'); board.querySelectorAll('video').forEach(o => { if (o !== v) o.pause(); }); });   // only one plays
       v.addEventListener('pause', () => { v.classList.remove('live'); try { v.currentTime = 0; } catch (e) {} });                                   // dim back to the start
       v.addEventListener('click', async () => { if (!v.src) { const u = await getUrl(s.item).catch(() => null); if (u) { v.src = u; v.muted = false; v.play().catch(() => {}); } } else if (v.paused) { v.play().catch(() => {}); } else { v.pause(); } });
       el.querySelector('.mx').onclick = () => openLight(getUrl(s.item).catch(() => null));
